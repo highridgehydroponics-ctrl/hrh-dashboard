@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HRH Morning Rundown</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; padding: 16px; }
+  h1 { font-size: 1.4rem; color: #fff; margin-bottom: 4px; }
+  .subtitle { color: #888; font-size: 0.85rem; margin-bottom: 16px; }
+  .header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  button#refreshBtn { background: #2a6496; color: #fff; border: none; padding: 7px 16px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+  button#refreshBtn:hover { background: #3a7ab6; }
+  button#refreshBtn:disabled { background: #444; cursor: default; }
+
+  /* KPI bar */
+  .kpi-bar { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .kpi { background: #1a1d27; border-radius: 8px; padding: 12px 18px; flex: 1; min-width: 120px; }
+  .kpi-val { font-size: 2rem; font-weight: 700; color: #4fc3f7; }
+  .kpi-label { font-size: 0.75rem; color: #888; margin-top: 2px; }
+
+  /* Sections */
+  .section { background: #1a1d27; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .section-title { font-size: 1rem; font-weight: 600; color: #fff; margin-bottom: 12px; border-bottom: 1px solid #2a2d3a; padding-bottom: 8px; }
+  .section-title span.badge { background: #2a3a4a; color: #4fc3f7; font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; margin-left: 8px; font-weight: 400; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th { text-align: left; color: #888; font-weight: 500; padding: 6px 8px; border-bottom: 1px solid #2a2d3a; white-space: nowrap; }
+  td { padding: 7px 8px; border-bottom: 1px solid #1e2130; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #1e2130; }
+
+  /* Customer group headers */
+  .stop-header { background: #1e2535; font-weight: 600; color: #b0c4de; }
+  .stop-header td { padding: 8px; border-bottom: 1px solid #2a2d3a; }
+  .stop-num { display: inline-block; background: #2a6496; color: #fff; font-size: 0.7rem; padding: 2px 6px; border-radius: 10px; margin-right: 6px; }
+  .inv-yes { color: #66bb6a; font-size: 0.8rem; }
+  .inv-no { color: #555; font-size: 0.8rem; }
+
+  /* Status pills */
+  .pill { display: inline-block; font-size: 0.7rem; padding: 2px 7px; border-radius: 10px; white-space: nowrap; }
+  .pill-packed { background: #1b4a1b; color: #66bb6a; }
+  .pill-upcoming { background: #1a3a4a; color: #4fc3f7; }
+  .pill-cancelled { background: #3a1a1a; color: #ef5350; }
+
+  /* Date group */
+  .date-group { font-weight: 600; color: #aaa; font-size: 0.8rem; padding: 6px 0 4px; border-top: 1px solid #2a2d3a; margin-top: 8px; }
+  .date-group:first-child { margin-top: 0; border-top: none; }
+
+  /* Oz table highlight */
+  .oz-total { font-weight: 600; color: #fff; }
+
+  /* Empty state */
+  .empty { color: #555; font-size: 0.85rem; padding: 10px 0; }
+
+  /* Loading / error */
+  #loading { text-align: center; padding: 60px; color: #888; }
+  #error-msg { background: #3a1a1a; color: #ef5350; border-radius: 8px; padding: 14px; margin-bottom: 16px; display: none; }
+  #content { display: none; }
+</style>
+</head>
+<body>
+
+<div id="loading">⏳ Loading fresh data from AppSheet...</div>
+<div id="error-msg"></div>
+<div id="content">
+  <div class="header-row">
+    <div>
+      <h1>🌱 HRH Morning Rundown</h1>
+      <div class="subtitle" id="subtitle"></div>
+    </div>
+    <button id="refreshBtn" onclick="loadData()">↻ Refresh</button>
+  </div>
+
+  <div class="kpi-bar" id="kpiBar"></div>
+
+  <div class="section" id="sec-packout">
+    <div class="section-title">📦 Pack-Out — Stops Today <span class="badge" id="badge-stops"></span></div>
+    <div id="packout-body"></div>
+  </div>
+
+  <div class="section" id="sec-harvest">
+    <div class="section-title">✂️ Harvest Today <span class="badge" id="badge-harvest"></span></div>
+    <div id="harvest-body"></div>
+  </div>
+
+  <div class="section" id="sec-labels">
+    <div class="section-title">🏷️ Labels to Print <span class="badge" id="badge-labels"></span></div>
+    <div id="labels-body"></div>
+  </div>
+
+  <div class="section" id="sec-oz">
+    <div class="section-title">⚖️ Oz Needed by Variety (Today + Tomorrow)</div>
+    <div id="oz-body"></div>
+  </div>
+
+  <div class="section" id="sec-plant">
+    <div class="section-title">🌱 Plant Today <span class="badge" id="badge-plant"></span></div>
+    <div id="plant-body"></div>
+  </div>
+
+  <div class="section" id="sec-tomorrow">
+    <div class="section-title">📋 Tomorrow's Orders <span class="badge" id="badge-tmr"></span></div>
+    <div id="tomorrow-body"></div>
+  </div>
+</div>
+
+<script>
+const ORDERS = { appId: 'bea55701-8006-4581-a791-19a75092943f', apiKey: 'V2-f4zl4-pDmwB-IZ9zh-t6ari-vPhJu-FmAwJ-WQ46U-LIUqO' };
+const GR     = { appId: 'fe7f55b7-a021-4f49-a9cb-c5528e8de84e', apiKey: 'V2-yQryr-d6cw2-Th5B2-TE8Na-aNKjx-YAnBI-K7AzT-iVWEh' };
+const GC     = { appId: '0ddb09d1-5e1c-434e-9e6e-ce46a54cd628', apiKey: 'V2-tSZCd-mCmE9-JdcyR-TIS5Q-grSxm-EKYUM-EkcIV-0CHoS' };
+
+function fmt(d) { return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}`; }
+
+async function appFetch(creds, table) {
+  const url = `https://api.appsheet.com/api/v2/apps/${creds.appId}/tables/${encodeURIComponent(table)}/Action`;
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'ApplicationAccessKey': creds.apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ Action: 'Find', Properties: {}, Rows: [] })
+  });
+  if (!r.ok) throw new Error(`AppSheet error on ${table}: ${r.status}`);
+  const t = await r.text();
+  return t.trim() ? JSON.parse(t) : [];
+}
+
+function simplifyRack(s) {
+  if (!s) return '—';
+  return s.split(',').map(p => {
+    p = p.trim().replace(/^[^-]+-/, '').replace(/\(\d+\)$/, '').trim();
+    return p;
+  }).filter(Boolean).join(', ') || '—';
+}
+
+function statusPill(s) {
+  if (!s) return '';
+  const low = s.toLowerCase();
+  if (low.includes('packed')) return `<span class="pill pill-packed">Packed</span>`;
+  if (low.includes('cancel')) return `<span class="pill pill-cancelled">Cancelled</span>`;
+  return `<span class="pill pill-upcoming">Upcoming</span>`;
+}
+
+async function loadData() {
+  document.getElementById('refreshBtn').disabled = true;
+  document.getElementById('refreshBtn').textContent = '⏳ Loading…';
+  document.getElementById('error-msg').style.display = 'none';
+
+  try {
+    const today = new Date();
+    const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+    const todayStr = fmt(today);
+    const tomorrowStr = fmt(tomorrow);
+
+    const [sliceAll, ordersAll, detailAll, batchAll, varietyAll, clientAll] = await Promise.all([
+      appFetch(ORDERS, 'labels to print upcoming week only'),
+      appFetch(ORDERS, 'order'),
+      appFetch(ORDERS, 'order_detail'),
+      appFetch(GC,     'batch'),
+      appFetch(GR,     'variety'),
+      appFetch(ORDERS, 'client')
+    ]);
+
+    // Build lookup maps
+    const varMap = {};
+    varietyAll.forEach(v => { varMap[v.id] = v; });
+
+    const clientPrefs = {};
+    clientAll.forEach(c => {
+      if (c.account_name && c.account_name.trim())
+        clientPrefs[c.account_name.trim()] = { bring_invoice: (c['bring_invoice?'] || 'N').trim() };
+    });
+
+    const orderMap = {};
+    ordersAll.forEach(o => { if (o.id) orderMap[o.id] = o; });
+
+    // Enrich detail with client_name
+    detailAll.forEach(d => {
+      if (!d.client_name && d.order && orderMap[d.order])
+        d.client_name = orderMap[d.order].client_name || '';
+    });
+
+    // Filter by date
+    const todayOrders  = ordersAll.filter(o => o.fulfillment_date === todayStr);
+    const todayDetails = detailAll.filter(d => d.fulfillment_date === todayStr);
+    const tmrOrders    = ordersAll.filter(o => o.fulfillment_date === tomorrowStr);
+    const tmrDetails   = detailAll.filter(d => d.fulfillment_date === tomorrowStr);
+    const labelsToday  = sliceAll.filter(r => r.fulfillment_date === todayStr);
+    const labelsTmr    = sliceAll.filter(r => r.fulfillment_date === tomorrowStr);
+
+    const harvests  = batchAll.filter(b => (b.optimal_harvest_date||'').trim() === todayStr && b.status_name === 'Being Harvested');
+    const plantings = batchAll.filter(b => (b.optimal_planting_date||'').trim() === todayStr);
+
+    const activeStops = todayOrders.filter(o => !o.status.toLowerCase().includes('cancel'));
+
+    // ── KPI BAR ──
+    document.getElementById('kpiBar').innerHTML = [
+      { val: activeStops.length, label: 'Stops Today' },
+      { val: todayDetails.filter(d => !d.status.toLowerCase().includes('cancel')).length, label: 'Items to Pack' },
+      { val: harvests.length, label: 'Harvests Today' },
+      { val: tmrOrders.length, label: "Tomorrow's Stops" }
+    ].map(k => `<div class="kpi"><div class="kpi-val">${k.val}</div><div class="kpi-label">${k.label}</div></div>`).join('');
+
+    document.getElementById('subtitle').textContent =
+      `${todayStr}  •  Refreshed at ${new Date().toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'})}`;
+
+    // ── PACK-OUT ──
+    document.getElementById('badge-stops').textContent = activeStops.length;
+    const sortedOrders = [...todayOrders].sort((a,b) => {
+      const an = parseInt(a.stop_number) || 9999;
+      const bn = parseInt(b.stop_number) || 9999;
+      return an - bn;
+    });
+    let packHtml = '';
+    if (sortedOrders.length === 0) {
+      packHtml = '<div class="empty">No orders today.</div>';
+    } else {
+      packHtml = '<table><thead><tr><th>Product</th><th>Qty</th><th>Oz</th><th>Unit $</th><th>Total $</th><th>Status</th></tr></thead><tbody>';
+      sortedOrders.forEach(ord => {
+        const prefs = clientPrefs[ord.client_name] || {};
+        const inv = prefs.bring_invoice === 'Y'
+          ? '<span class="inv-yes">✓ Invoice</span>'
+          : '<span class="inv-no">No invoice</span>';
+        const stopLabel = ord.stop_number ? `<span class="stop-num">#${ord.stop_number}</span>` : '';
+        packHtml += `<tr class="stop-header"><td colspan="6">${stopLabel}<strong>${ord.client_name}</strong> &nbsp; ${inv} &nbsp; <span style="color:#888;font-size:0.78rem;font-weight:400">${ord.status}</span></td></tr>`;
+        const items = todayDetails.filter(d => d.order === ord.id);
+        if (items.length === 0) {
+          packHtml += `<tr><td colspan="6" class="empty" style="padding-left:16px">No items</td></tr>`;
+        } else {
+          items.forEach(it => {
+            packHtml += `<tr>
+              <td style="padding-left:16px">${it.product_name||'—'}</td>
+              <td>${it.quantity_boxes||0}</td>
+              <td>${it.total_ounces||0}</td>
+              <td>${it.unit_price ? '$'+parseFloat(it.unit_price).toFixed(2) : '—'}</td>
+              <td>${it.total_price ? '$'+parseFloat(it.total_price).toFixed(2) : '—'}</td>
+              <td>${statusPill(it.status)}</td>
+            </tr>`;
+          });
+        }
+      });
+      packHtml += '</tbody></table>';
+    }
+    document.getElementById('packout-body').innerHTML = packHtml;
+
+    // ── HARVESTS ──
+    document.getElementById('badge-harvest').textContent = harvests.length;
+    if (harvests.length === 0) {
+      document.getElementById('harvest-body').innerHTML = '<div class="empty">No harvests scheduled today.</div>';
+    } else {
+      const m12 = harvests.filter(b => /^M[12]/i.test(b.rack || ''));
+      const tbl = m12.length > 0 ? m12 : harvests;
+      let hHtml = '<table><thead><tr><th>Rack</th><th>Trays</th><th>Batch</th><th>Harvest Time</th></tr></thead><tbody>';
+      tbl.forEach(b => {
+        hHtml += `<tr>
+          <td>${simplifyRack(b.rack)}</td>
+          <td>${b.number_of_trays||'?'}</td>
+          <td>${b.name||'—'}</td>
+          <td>${b.optimal_harvest_time ? b.optimal_harvest_time.replace(':00','') : '—'}</td>
+        </tr>`;
+      });
+      hHtml += '</tbody></table>';
+      document.getElementById('harvest-body').innerHTML = hHtml;
+    }
+
+    // ── LABELS ──
+    const totalLabels = labelsToday.length + labelsTmr.length;
+    document.getElementById('badge-labels').textContent = totalLabels;
+    if (totalLabels === 0) {
+      document.getElementById('labels-body').innerHTML = '<div class="empty">No unprinted labels for today or tomorrow.</div>';
+    } else {
+      let lHtml = '';
+      const byDate = [[todayStr, labelsToday], [tomorrowStr, labelsTmr]];
+      byDate.forEach(([dateStr, items]) => {
+        if (items.length === 0) return;
+        const sorted = [...items].sort((a,b) => (a.product_name||'').localeCompare(b.product_name||''));
+        lHtml += `<div class="date-group">${dateStr}</div>`;
+        lHtml += '<table><thead><tr><th>Product</th><th>Qty</th><th>Oz</th></tr></thead><tbody>';
+        sorted.forEach(l => {
+          lHtml += `<tr><td>${l.product_name||'—'}</td><td>${l.quantity_boxes||0}</td><td>${l.total_ounces||0}</td></tr>`;
+        });
+        lHtml += '</tbody></table>';
+      });
+      document.getElementById('labels-body').innerHTML = lHtml;
+    }
+
+    // ── OZ BY VARIETY ──
+    const ozMap = {};
+    [...todayDetails, ...tmrDetails].forEach(d => {
+      const v = varMap[d.variety];
+      if (!v || v['mix?'] === 'Y') return;
+      const name = v.name || d.variety;
+      const oz = parseFloat(d.total_ounces) || 0;
+      if (oz === 0) return;
+      ozMap[name] = (ozMap[name] || 0) + oz;
+    });
+    const ozEntries = Object.entries(ozMap).sort((a,b) => b[1]-a[1]);
+    if (ozEntries.length === 0) {
+      document.getElementById('oz-body').innerHTML = '<div class="empty">No oz data.</div>';
+    } else {
+      let ozHtml = '<table><thead><tr><th>Variety</th><th>Total Oz Needed</th></tr></thead><tbody>';
+      ozEntries.forEach(([name, oz]) => {
+        ozHtml += `<tr><td>${name}</td><td class="oz-total">${oz} oz</td></tr>`;
+      });
+      ozHtml += '</tbody></table>';
+      document.getElementById('oz-body').innerHTML = ozHtml;
+    }
+
+    // ── PLANTINGS ──
+    document.getElementById('badge-plant').textContent = plantings.length;
+    const nonLettuceNonMix = plantings.filter(b => {
+      const v = varMap[b.variety];
+      if (!v) return true;
+      if (v['mix?'] === 'Y') return false;
+      if (v.reserve_1 === 'Lettuce') return false;
+      const nm = (v.name||'').toLowerCase();
+      if (nm.includes('lettuce') || nm.includes('hydro salanova') || nm.includes('little gem')) return false;
+      return true;
+    });
+    if (nonLettuceNonMix.length === 0) {
+      document.getElementById('plant-body').innerHTML = '<div class="empty">No plantings today.</div>';
+    } else {
+      let pHtml = '<table><thead><tr><th>Batch</th><th>Variety</th><th>Trays</th></tr></thead><tbody>';
+      nonLettuceNonMix.forEach(b => {
+        const vname = varMap[b.variety] ? varMap[b.variety].name : b.variety;
+        pHtml += `<tr><td>${b.name||'—'}</td><td>${vname}</td><td>${b.number_of_trays||'?'}</td></tr>`;
+      });
+      pHtml += '</tbody></table>';
+      document.getElementById('plant-body').innerHTML = pHtml;
+    }
+
+    // ── TOMORROW ──
+    document.getElementById('badge-tmr').textContent = tmrOrders.length;
+    const sortedTmr = [...tmrOrders].sort((a,b) => (parseInt(a.stop_number)||9999)-(parseInt(b.stop_number)||9999));
+    if (sortedTmr.length === 0) {
+      document.getElementById('tomorrow-body').innerHTML = '<div class="empty">No orders tomorrow.</div>';
+    } else {
+      let tHtml = '<table><thead><tr><th>Product</th><th>Qty</th><th>Oz</th><th>Status</th></tr></thead><tbody>';
+      sortedTmr.forEach(ord => {
+        const stopLabel = ord.stop_number ? `<span class="stop-num">#${ord.stop_number}</span>` : '';
+        tHtml += `<tr class="stop-header"><td colspan="4">${stopLabel}<strong>${ord.client_name}</strong></td></tr>`;
+        const items = tmrDetails.filter(d => d.order === ord.id);
+        items.forEach(it => {
+          tHtml += `<tr>
+            <td style="padding-left:16px">${it.product_name||'—'}</td>
+            <td>${it.quantity_boxes||0}</td>
+            <td>${it.total_ounces||0}</td>
+            <td>${statusPill(it.status)}</td>
+          </tr>`;
+        });
+      });
+      tHtml += '</tbody></table>';
+      document.getElementById('tomorrow-body').innerHTML = tHtml;
+    }
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+
+  } catch(err) {
+    const errEl = document.getElementById('error-msg');
+    errEl.textContent = '⚠️ ' + err.message;
+    errEl.style.display = 'block';
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+  } finally {
+    document.getElementById('refreshBtn').disabled = false;
+    document.getElementById('refreshBtn').textContent = '↻ Refresh';
+  }
+}
+
+loadData();
+</script>
+</body>
+</html>
