@@ -6,193 +6,219 @@
 <title>HRH Morning Rundown</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; padding: 16px; }
-  h1 { font-size: 1.4rem; color: #fff; margin-bottom: 2px; }
-  .subtitle { color: #888; font-size: 0.85rem; }
-  .header-row { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; gap: 12px; }
-  .header-btns { display: flex; gap: 8px; align-items: center; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
-  button { border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
-  #refreshBtn  { background: #2a6496; color: #fff; }
-  #refreshBtn:hover { background: #3a7ab6; }
-  #refreshBtn:disabled { background: #444; cursor: default; }
-  #showAllBtn  { background: #2a2d3a; color: #aaa; display: none; }
-  #showAllBtn:hover { background: #3a3d4a; color: #fff; }
-  #printBtn    { background: #2a3a2a; color: #66bb6a; }
-  #printBtn:hover { background: #3a4a3a; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #eef0f5; color: #222; padding: 20px; }
 
-  /* Date navigation */
-  .date-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
-  .date-nav button { background: #1a1d27; color: #aaa; padding: 5px 12px; font-size: 0.9rem; }
-  .date-nav button:hover { background: #2a2d3a; color: #fff; }
-  #dateDisplay { font-size: 1rem; font-weight: 600; color: #fff; min-width: 110px; text-align: center; }
-  #todayBtn { background: #1a2a3a; color: #4fc3f7; font-size: 0.75rem; padding: 4px 10px; }
-  #todayBtn:hover { background: #2a3a4a; }
+  /* ── HEADER ── */
+  .header-row { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+  h1 { font-size: 1.35rem; font-weight: 700; color: #111; display: flex; align-items: center; gap: 8px; }
+  .date-badge { background: #dbe8ff; color: #1a56cc; font-size: 0.82rem;
+    font-weight: 600; padding: 4px 12px; border-radius: 20px; white-space: nowrap; }
+  .header-btns { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .warn-badge { background: #fff8e1; color: #b45309; font-size: 0.78rem;
+    padding: 4px 10px; border-radius: 6px; border: 1px solid #fde68a; }
+  button { border: none; padding: 7px 14px; border-radius: 7px; cursor: pointer; font-size: 0.83rem; font-weight: 500; }
+  #showAllBtn  { background: #e8eaf0; color: #555; display: none; }
+  #showAllBtn:hover { background: #d8dae0; }
+  #refreshBtn  { background: #22c55e; color: #fff; display: flex; align-items: center; gap: 5px; }
+  #refreshBtn:hover { background: #16a34a; }
+  #refreshBtn:disabled { background: #9ca3af; cursor: default; }
+  #printBtn    { background: #e8eaf0; color: #555; }
+  #printBtn:hover { background: #d8dae0; }
 
-  /* KPI cards */
-  .kpi-bar { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
-  .kpi { background: #1a1d27; border-radius: 8px; padding: 12px 18px; flex: 1; min-width: 120px;
+  /* ── DATE NAV ── */
+  .date-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
+  .date-nav-btn { background: #fff; border: 1px solid #dde0e8; color: #555;
+    padding: 5px 11px; font-size: 0.9rem; border-radius: 6px; }
+  .date-nav-btn:hover { background: #f0f2f7; }
+  #dateDisplay { font-size: 0.9rem; font-weight: 600; color: #333;
+    min-width: 150px; text-align: center; }
+  #todayBtn { background: #dbe8ff; color: #1a56cc; font-size: 0.75rem;
+    padding: 4px 10px; border-radius: 6px; border: none; display: none; }
+  #todayBtn:hover { background: #c7d8ff; }
+
+  /* ── KPI CARDS ── */
+  .kpi-bar { display: flex; gap: 12px; margin-bottom: 22px; flex-wrap: wrap; }
+  .kpi { background: #fff; border-radius: 10px; padding: 14px 18px; flex: 1; min-width: 110px;
     cursor: pointer; user-select: none; border: 2px solid transparent;
-    transition: border-color .15s, background .15s, transform .1s; }
-  .kpi:hover { background: #22263a; border-color: #2a6496; transform: translateY(-1px); }
-  .kpi.active { background: #0d2035; border-color: #4fc3f7; }
-  .kpi.active .kpi-label { color: #4fc3f7; }
-  .kpi-val   { font-size: 2rem; font-weight: 700; color: #4fc3f7; }
-  .kpi-label { font-size: 0.75rem; color: #888; margin-top: 2px; }
-  .kpi-hint  { font-size: 0.65rem; color: #555; margin-top: 4px; }
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    transition: border-color .15s, box-shadow .15s, transform .1s; }
+  .kpi:hover { border-color: #bbc6e0; box-shadow: 0 3px 10px rgba(0,0,0,.1); transform: translateY(-1px); }
+  .kpi.active { border-color: #1a56cc; box-shadow: 0 3px 12px rgba(26,86,204,.2); }
+  .kpi-val   { font-size: 2rem; font-weight: 700; line-height: 1.1; }
+  .kpi-label { font-size: 0.7rem; font-weight: 600; letter-spacing: .05em;
+    text-transform: uppercase; color: #888; margin-top: 4px; }
+  .kpi-hint  { font-size: 0.65rem; color: #bbb; margin-top: 3px; }
+  /* KPI colors */
+  .kpi-green  .kpi-val { color: #16a34a; }
+  .kpi-orange .kpi-val { color: #ea580c; }
+  .kpi-blue   .kpi-val { color: #1d4ed8; }
+  .kpi-purple .kpi-val { color: #7c3aed; }
 
-  /* Sections */
-  .section { background: #1a1d27; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
-  .section-title { font-size: 1rem; font-weight: 600; color: #fff; margin-bottom: 12px;
-    border-bottom: 1px solid #2a2d3a; padding-bottom: 8px; display: flex; align-items: center; gap: 8px; }
-  .section-title span.badge { background: #2a3a4a; color: #4fc3f7; font-size: 0.75rem;
-    padding: 2px 8px; border-radius: 10px; font-weight: 400; }
+  /* ── SECTIONS ── */
+  .section { background: #fff; border-radius: 10px; padding: 18px 20px;
+    margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+  .section-title { font-size: 0.95rem; font-weight: 700; color: #111;
+    margin-bottom: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .sec-badge { background: #f0f2f7; color: #1a56cc; font-size: 0.72rem;
+    padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+  .sec-sub { color: #999; font-size: 0.75rem; font-weight: 400; }
 
-  /* Table wrapper — horizontal scroll on mobile */
+  /* ── TABLES ── */
   .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 480px; }
-  th { text-align: left; color: #888; font-weight: 500; padding: 6px 8px;
-    border-bottom: 1px solid #2a2d3a; white-space: nowrap; }
-  td { padding: 7px 8px; border-bottom: 1px solid #1e2130; vertical-align: middle; }
-  tr:last-child td { border-bottom: none; }
-  tr:hover td { background: #1e2130; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.84rem; min-width: 400px; }
+  thead tr { border-bottom: 2px solid #eef0f5; }
+  th { text-align: left; color: #999; font-size: 0.72rem; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; padding: 6px 10px; white-space: nowrap; }
+  td { padding: 9px 10px; border-bottom: 1px solid #f2f4f8; vertical-align: middle; color: #333; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: #f8f9fc; }
 
-  /* Pack-out */
-  .stop-num { display: inline-block; background: #2a6496; color: #fff; font-size: 0.72rem;
-    padding: 2px 7px; border-radius: 10px; font-weight: 600; }
-  .customer-name { font-weight: 600; color: #b0c4de; white-space: nowrap; }
-  .subtotal-row td { border-top: 1px solid #2a2d3a; color: #aaa; font-style: italic; font-size: 0.8rem; }
-  .subtotal-val { color: #fff; font-weight: 600; font-style: normal; }
+  /* Pack-out specific */
+  .qty-badge { display: inline-block; background: #fff7ed; color: #ea580c;
+    font-weight: 700; font-size: 0.82rem; padding: 1px 8px; border-radius: 8px; min-width: 28px; text-align: center; }
+  .customer-col { color: #888; }
+  .status-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+  .dot-upcoming  { background: #22c55e; }
+  .dot-packed    { background: #94a3b8; }
+  .dot-cancelled { background: #ef4444; }
 
-  /* Cancelled section */
-  .cancelled-toggle { background: none; border: none; color: #666; font-size: 0.8rem;
-    cursor: pointer; padding: 6px 0; display: flex; align-items: center; gap: 6px; }
-  .cancelled-toggle:hover { color: #aaa; }
-  .cancelled-section { margin-top: 12px; border-top: 1px solid #2a2d3a; padding-top: 10px; }
-  tr.row-cancelled td { opacity: 0.45; text-decoration: line-through; }
+  /* Stop num */
+  .stop-num { display: inline-block; background: #1d4ed8; color: #fff;
+    font-size: 0.7rem; padding: 2px 7px; border-radius: 8px; font-weight: 600; }
 
-  /* Status pills */
-  .pill { display: inline-block; font-size: 0.7rem; padding: 2px 7px; border-radius: 10px; white-space: nowrap; }
-  .pill-packed    { background: #1b4a1b; color: #66bb6a; }
-  .pill-upcoming  { background: #1a3a4a; color: #4fc3f7; }
-  .pill-cancelled { background: #3a1a1a; color: #ef5350; }
+  /* Subtotal row */
+  .subtotal-row td { color: #aaa; font-style: italic; font-size: 0.8rem;
+    border-top: 1px solid #eef0f5; }
+  .subtotal-val { color: #333; font-weight: 600; font-style: normal; }
 
-  /* Invoice */
-  .inv-yes { color: #66bb6a; font-weight: 600; }
-  .inv-no  { color: #555; }
+  /* Cancelled toggle */
+  .cancelled-toggle { background: none; border: none; color: #aaa; font-size: 0.8rem;
+    cursor: pointer; padding: 8px 0; display: flex; align-items: center; gap: 6px; }
+  .cancelled-toggle:hover { color: #666; }
+  .cancelled-section { border-top: 1px solid #eef0f5; padding-top: 8px; margin-top: 8px; }
+  tr.row-cancelled td { opacity: 0.4; text-decoration: line-through; }
 
   /* Harvest yield */
   .yield-wrap { display: flex; align-items: center; gap: 6px; }
-  .yield-input { width: 44px; background: #0f1117; border: 1px solid #2a6496; border-radius: 4px;
-    color: #4fc3f7; font-size: 0.85rem; padding: 2px 5px; text-align: center; }
-  .yield-input:focus { outline: none; border-color: #4fc3f7; }
-  .yield-of { color: #555; font-size: 0.8rem; }
-  .yield-bar-wrap { width: 60px; background: #2a2d3a; border-radius: 4px; height: 6px; overflow: hidden; }
-  .yield-bar { height: 100%; background: #4fc3f7; border-radius: 4px; transition: width .3s; }
+  .yield-input { width: 44px; background: #f0f4ff; border: 1px solid #a5b4fc;
+    border-radius: 4px; color: #1d4ed8; font-size: 0.84rem; padding: 2px 5px; text-align: center; }
+  .yield-input:focus { outline: none; border-color: #1d4ed8; }
+  .yield-of { color: #aaa; font-size: 0.8rem; }
+  .yield-bar-wrap { width: 54px; background: #e8eaf0; border-radius: 4px; height: 5px; overflow: hidden; }
+  .yield-bar { height: 100%; background: #1d4ed8; border-radius: 4px; transition: width .3s; }
 
-  /* Date groups (labels) */
-  .date-group { font-weight: 600; color: #aaa; font-size: 0.8rem;
-    padding: 8px 0 4px; border-top: 1px solid #2a2d3a; margin-top: 8px; }
+  /* Date groups */
+  .date-group { font-weight: 600; color: #aaa; font-size: 0.78rem;
+    padding: 8px 0 4px; border-top: 1px solid #eef0f5; margin-top: 8px; }
   .date-group:first-child { margin-top: 0; border-top: none; }
 
   /* Oz */
-  .oz-total { font-weight: 600; color: #fff; }
+  .oz-total { font-weight: 600; }
 
-  /* Empty */
-  .empty { color: #555; font-size: 0.85rem; padding: 10px 0; }
+  /* Status pill (harvest/plant sections) */
+  .pill { display: inline-block; font-size: 0.7rem; padding: 2px 7px; border-radius: 8px; white-space: nowrap; }
+  .pill-packed    { background: #f1f5f9; color: #64748b; }
+  .pill-upcoming  { background: #dcfce7; color: #16a34a; }
+  .pill-cancelled { background: #fee2e2; color: #dc2626; }
+
+  /* Invoice */
+  .inv-yes { color: #16a34a; font-weight: 600; }
+  .inv-no  { color: #ccc; }
+
+  .empty { color: #bbb; font-size: 0.85rem; padding: 12px 0; }
 
   /* Loading / error */
-  #loading  { text-align: center; padding: 60px; color: #888; }
-  #error-msg { background: #3a1a1a; color: #ef5350; border-radius: 8px;
-    padding: 14px; margin-bottom: 16px; display: none; }
-  #content  { display: none; }
+  #loading   { text-align: center; padding: 80px; color: #888; font-size: 1rem; }
+  #error-msg { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca;
+    border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; display: none; }
+  #content   { display: none; }
 
-  /* Print styles */
+  /* Print */
   @media print {
-    body { background: #fff; color: #000; padding: 8px; font-size: 11px; }
-    .header-btns, .date-nav, .kpi-bar, #showAllBtn, #printBtn,
-    .kpi-hint, .cancelled-toggle { display: none !important; }
-    h1 { font-size: 1.1rem; color: #000; }
-    .subtitle { color: #555; }
-    .section { background: #fff; border: 1px solid #ccc; border-radius: 0;
-      padding: 10px; margin-bottom: 10px; break-inside: avoid; }
-    .section-title { color: #000; border-bottom: 1px solid #ccc; }
-    .section-title .badge { background: #eee; color: #333; }
-    th { color: #555; border-bottom: 1px solid #ccc; }
-    td { border-bottom: 1px solid #eee; color: #000; }
-    .stop-num { background: #333; }
-    .customer-name { color: #000; }
-    .pill-packed   { background: #d4edda; color: #155724; }
-    .pill-upcoming { background: #d1ecf1; color: #0c5460; }
-    .pill-cancelled{ background: #f8d7da; color: #721c24; }
-    .inv-yes { color: #155724; }
-    .inv-no  { color: #999; }
-    .yield-input { border: 1px solid #ccc; color: #000; background: #fff; }
-    .yield-bar-wrap { background: #eee; }
-    .yield-bar { background: #333; }
-    .subtotal-row td { color: #555; }
-    .subtotal-val { color: #000; }
-    tr.row-cancelled td { opacity: 0.4; }
+    body { background: #fff; padding: 8px; font-size: 11px; }
+    .header-btns, .date-nav, .kpi-hint, .cancelled-toggle,
+    #showAllBtn, #printBtn { display: none !important; }
+    .section { box-shadow: none; border: 1px solid #ddd; padding: 10px; break-inside: avoid; }
+    .kpi { box-shadow: none; border: 1px solid #ddd; }
     .tbl-wrap { overflow: visible; }
   }
 </style>
 </head>
 <body>
 
-<div id="loading">⏳ Loading fresh data from AppSheet...</div>
+<div id="loading">⏳ Loading fresh data from AppSheet…</div>
 <div id="error-msg"></div>
-<div id="content">
 
+<div id="content">
   <div class="header-row">
-    <div>
-      <h1>🌱 HRH Morning Rundown</h1>
-      <div class="subtitle" id="subtitle"></div>
-    </div>
+    <h1>🌱 HRH Morning Rundown</h1>
+    <span class="date-badge" id="dateBadge"></span>
     <div class="header-btns">
-      <button id="showAllBtn" onclick="showAll()">✕ Show All</button>
+      <button id="showAllBtn" onclick="showAll()">← Show All</button>
+      <span id="warnBadge" class="warn-badge" style="display:none">⚠️ Live fetch failed — showing cached data</span>
       <button id="printBtn" onclick="window.print()">🖨 Print</button>
-      <button id="refreshBtn" onclick="loadData()">↻ Refresh</button>
+      <button id="refreshBtn" onclick="loadData()">⚡ Refresh</button>
     </div>
   </div>
 
   <div class="date-nav">
-    <button onclick="shiftDate(-1)">←</button>
+    <button class="date-nav-btn" onclick="shiftDate(-1)">←</button>
     <span id="dateDisplay"></span>
-    <button onclick="shiftDate(1)">→</button>
+    <button class="date-nav-btn" onclick="shiftDate(1)">→</button>
     <button id="todayBtn" onclick="goToday()">Today</button>
   </div>
 
   <div class="kpi-bar" id="kpiBar"></div>
 
   <div class="section" id="sec-packout">
-    <div class="section-title">📦 Pack-Out — Stops Today <span class="badge" id="badge-stops"></span></div>
+    <div class="section-title">
+      📦 Pack Out for Today's Deliveries
+      <span class="sec-badge" id="badge-stops"></span>
+      <span class="sec-sub" id="packout-sub"></span>
+    </div>
     <div id="packout-body"></div>
   </div>
 
   <div class="section" id="sec-harvest">
-    <div class="section-title">✂️ Harvest Today <span class="badge" id="badge-harvest"></span></div>
+    <div class="section-title">
+      ✂️ Harvest Today
+      <span class="sec-badge" id="badge-harvest"></span>
+    </div>
     <div id="harvest-body"></div>
   </div>
 
   <div class="section" id="sec-labels">
-    <div class="section-title">🏷️ Labels to Print <span class="badge" id="badge-labels"></span></div>
+    <div class="section-title">
+      🏷️ Labels to Print
+      <span class="sec-badge" id="badge-labels"></span>
+    </div>
     <div id="labels-body"></div>
   </div>
 
   <div class="section" id="sec-oz">
-    <div class="section-title">⚖️ Oz Needed by Variety <span style="color:#555;font-weight:400;font-size:0.8rem">(selected + next day)</span></div>
+    <div class="section-title">
+      ⚖️ Oz Needed by Variety
+      <span class="sec-sub">(selected day + next day)</span>
+    </div>
     <div id="oz-body"></div>
   </div>
 
   <div class="section" id="sec-plant">
-    <div class="section-title">🌱 Plant Today <span class="badge" id="badge-plant"></span></div>
+    <div class="section-title">
+      🌱 Plant Today
+      <span class="sec-badge" id="badge-plant"></span>
+    </div>
     <div id="plant-body"></div>
   </div>
 
   <div class="section" id="sec-tomorrow">
-    <div class="section-title">📋 Tomorrow's Orders <span class="badge" id="badge-tmr"></span></div>
+    <div class="section-title">
+      📋 Tomorrow's Deliveries
+      <span class="sec-badge" id="badge-tmr"></span>
+    </div>
     <div id="tomorrow-body"></div>
   </div>
-
 </div>
 
 <script>
@@ -202,47 +228,40 @@ const GC     = { appId: '0ddb09d1-5e1c-434e-9e6e-ce46a54cd628', apiKey: 'V2-tSZC
 
 const ALL_SECTIONS = ['sec-packout','sec-harvest','sec-labels','sec-oz','sec-plant','sec-tomorrow'];
 let activeFilter = null;
-let __store = null;         // full raw data after first fetch
-let __viewDate = new Date(); // currently displayed date
+let __store      = null;
+let __viewDate   = new Date();
 
 // ── DATE HELPERS ──────────────────────────────────────────────────────────────
 function fmt(d) {
   return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}`;
 }
-function fmtDisplay(d) {
-  return d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+function fmtLong(d) {
+  return d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
 }
-function addDays(d, n) {
-  const r = new Date(d); r.setDate(r.getDate() + n); return r;
+function fmtBadge(d) {
+  return d.toLocaleDateString('en-US', { weekday:'long', month:'short', day:'numeric' });
 }
+function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate()+n); return r; }
 function isToday(d) {
   const t = new Date();
   return d.getFullYear()===t.getFullYear() && d.getMonth()===t.getMonth() && d.getDate()===t.getDate();
 }
 
-function shiftDate(n) {
-  __viewDate = addDays(__viewDate, n);
-  renderForDate(__viewDate);
-}
-function goToday() {
-  __viewDate = new Date();
-  renderForDate(__viewDate);
-}
+function shiftDate(n) { __viewDate = addDays(__viewDate, n); renderForDate(__viewDate); }
+function goToday()    { __viewDate = new Date(); renderForDate(__viewDate); }
 
-// ── FILTER LOGIC ──────────────────────────────────────────────────────────────
+// ── FILTER ────────────────────────────────────────────────────────────────────
 function filterSection(card) {
   const target = card.dataset.target;
   if (activeFilter === target) { showAll(); return; }
   activeFilter = target;
   document.querySelectorAll('.kpi').forEach(k => k.classList.remove('active'));
   card.classList.add('active');
-  const targets = target.split(',');
   ALL_SECTIONS.forEach(id => {
-    document.getElementById(id).style.display = targets.includes(id) ? 'block' : 'none';
+    document.getElementById(id).style.display = target.split(',').includes(id) ? 'block' : 'none';
   });
   document.getElementById('showAllBtn').style.display = 'inline-block';
 }
-
 function showAll() {
   activeFilter = null;
   document.querySelectorAll('.kpi').forEach(k => k.classList.remove('active'));
@@ -250,7 +269,7 @@ function showAll() {
   document.getElementById('showAllBtn').style.display = 'none';
 }
 
-// ── APPSHEET FETCH ────────────────────────────────────────────────────────────
+// ── APPSHEET ──────────────────────────────────────────────────────────────────
 async function appFetch(creds, table) {
   const url = `https://api.appsheet.com/api/v2/apps/${creds.appId}/tables/${encodeURIComponent(table)}/Action`;
   const r = await fetch(url, {
@@ -263,14 +282,13 @@ async function appFetch(creds, table) {
   return t.trim() ? JSON.parse(t) : [];
 }
 
-// ── RENDER HELPERS ────────────────────────────────────────────────────────────
+// ── HELPERS ───────────────────────────────────────────────────────────────────
 function simplifyRack(s) {
   if (!s) return '—';
   return s.split(',').map(p =>
     p.trim().replace(/^[^-]+-/, '').replace(/\(\d+\)$/, '').trim()
   ).filter(Boolean).join(', ') || '—';
 }
-
 function statusPill(s) {
   if (!s) return '';
   const l = s.toLowerCase();
@@ -278,40 +296,45 @@ function statusPill(s) {
   if (l.includes('cancel'))  return `<span class="pill pill-cancelled">Cancelled</span>`;
   return `<span class="pill pill-upcoming">Upcoming</span>`;
 }
-
+function statusDot(s) {
+  if (!s) return '';
+  const l = s.toLowerCase();
+  if (l.includes('packed'))  return `<span class="status-dot dot-packed"  title="Packed Out"></span>`;
+  if (l.includes('cancel'))  return `<span class="status-dot dot-cancelled" title="Cancelled"></span>`;
+  return `<span class="status-dot dot-upcoming" title="Upcoming"></span>`;
+}
 function yieldCell(b) {
-  const total = parseInt(b.number_of_trays) || 0;
-  const done  = parseInt(b.number_trays_harvested) || 0;
-  const pct   = total > 0 ? Math.min(100, Math.round(done/total*100)) : 0;
-  const id    = 'yld_' + b.id;
+  const total = parseInt(b.number_of_trays)||0;
+  const done  = parseInt(b.number_trays_harvested)||0;
+  const pct   = total>0 ? Math.min(100, Math.round(done/total*100)) : 0;
   return `<div class="yield-wrap">
-    <input class="yield-input" id="${id}" type="number" min="0" max="${total}" value="${done}"
-      onchange="updateYield(this, ${total})" title="Trays harvested">
+    <input class="yield-input" id="yld_${b.id}" type="number" min="0" max="${total}" value="${done}"
+      onchange="updateYield(this,${total},'bar_${b.id}')" title="Trays harvested">
     <span class="yield-of">/ ${total}</span>
     <div class="yield-bar-wrap"><div class="yield-bar" id="bar_${b.id}" style="width:${pct}%"></div></div>
   </div>`;
 }
-
-function updateYield(input, total) {
-  const val = Math.min(total, Math.max(0, parseInt(input.value)||0));
-  input.value = val;
-  const bar = document.getElementById('bar_' + input.id.replace('yld_',''));
-  if (bar) bar.style.width = (total > 0 ? Math.round(val/total*100) : 0) + '%';
+function updateYield(input, total, barId) {
+  const v = Math.min(total, Math.max(0, parseInt(input.value)||0));
+  input.value = v;
+  const bar = document.getElementById(barId);
+  if (bar) bar.style.width = (total>0 ? Math.round(v/total*100) : 0) + '%';
 }
 
-// ── RENDER FOR DATE ────────────────────────────────────────────────────────────
+// ── RENDER ────────────────────────────────────────────────────────────────────
 function renderForDate(viewDate) {
   if (!__store) return;
   const { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap } = __store;
 
-  const todayStr  = fmt(viewDate);
-  const tmrStr    = fmt(addDays(viewDate, 1));
+  const todayStr = fmt(viewDate);
+  const tmrStr   = fmt(addDays(viewDate, 1));
 
-  document.getElementById('dateDisplay').textContent = fmtDisplay(viewDate);
-  document.getElementById('todayBtn').style.display = isToday(viewDate) ? 'none' : 'inline-block';
-  document.getElementById('subtitle').textContent =
-    `${todayStr}  •  Data fetched at ${__store.fetchedAt}`;
+  // Update date displays
+  document.getElementById('dateBadge').textContent   = fmtBadge(viewDate);
+  document.getElementById('dateDisplay').textContent  = fmtLong(viewDate);
+  document.getElementById('todayBtn').style.display   = isToday(viewDate) ? 'none' : 'inline-block';
 
+  // Filter data
   const todayOrders  = ordersAll.filter(o => o.fulfillment_date === todayStr);
   const todayDetails = detailAll.filter(d => d.fulfillment_date === todayStr);
   const tmrOrders    = ordersAll.filter(o => o.fulfillment_date === tmrStr);
@@ -321,95 +344,97 @@ function renderForDate(viewDate) {
   const harvests     = batchAll.filter(b => (b.optimal_harvest_date||'').trim() === todayStr && b.status_name === 'Being Harvested');
   const plantings    = batchAll.filter(b => (b.optimal_planting_date||'').trim() === todayStr);
 
+  // Pack-out: ONLY upcoming items (not packed out, not cancelled)
+  const upcomingItems = todayDetails.filter(d => {
+    const s = (d.status||'').toLowerCase();
+    return s.includes('upcoming') && !s.includes('cancel');
+  });
   const activeOrders    = todayOrders.filter(o => !o.status.toLowerCase().includes('cancel'));
   const cancelledOrders = todayOrders.filter(o =>  o.status.toLowerCase().includes('cancel'));
-  const activeItems     = todayDetails.filter(d => !d.status.toLowerCase().includes('cancel'));
 
   // ── KPI BAR ──
+  const totalLabels = labelsToday.length + labelsTmr.length;
   const kpiDefs = [
-    { val: activeOrders.length,  label: 'Stops Today',      target: 'sec-packout' },
-    { val: activeItems.length,   label: 'Items to Pack',    target: 'sec-packout' },
-    { val: harvests.length,      label: 'Harvests Today',   target: 'sec-harvest' },
-    { val: tmrOrders.length,     label: "Tomorrow's Stops", target: 'sec-tomorrow' },
+    { val: activeOrders.length,  label: 'Stops Today',          target: 'sec-packout', cls: 'kpi-green'  },
+    { val: upcomingItems.length, label: 'Items to Pack',         target: 'sec-packout', cls: 'kpi-orange' },
+    { val: harvests.length,      label: 'To Harvest',            target: 'sec-harvest', cls: 'kpi-blue'   },
+    { val: plantings.length,     label: 'To Plant',              target: 'sec-plant',   cls: 'kpi-blue'   },
+    { val: totalLabels,          label: 'Labels to Print',       target: 'sec-labels',  cls: 'kpi-orange' },
+    { val: tmrOrders.length,     label: 'Deliveries Tomorrow',   target: 'sec-tomorrow',cls: 'kpi-purple' },
   ];
   document.getElementById('kpiBar').innerHTML = kpiDefs.map(k =>
-    `<div class="kpi${activeFilter===k.target?' active':''}" data-target="${k.target}" onclick="filterSection(this)">
+    `<div class="kpi ${k.cls}${activeFilter===k.target?' active':''}"
+      data-target="${k.target}" onclick="filterSection(this)">
       <div class="kpi-val">${k.val}</div>
       <div class="kpi-label">${k.label}</div>
-      <div class="kpi-hint">Tap to filter</div>
+      <div class="kpi-hint">click to focus</div>
     </div>`
   ).join('');
 
-  // ── PACK-OUT ──
-  document.getElementById('badge-stops').textContent = activeOrders.length;
-  const sortedActive = [...activeOrders].sort((a,b) =>
+  // ── PACK-OUT (upcoming items only, sorted by stop) ──
+  document.getElementById('badge-stops').textContent = upcomingItems.length;
+  document.getElementById('packout-sub').textContent =
+    `Upcoming items only · sorted by stop`;
+
+  const sortedOrders = [...activeOrders].sort((a,b) =>
     (parseInt(a.stop_number)||9999) - (parseInt(b.stop_number)||9999)
   );
 
-  const buildPackTable = (orders, isCancelled) => {
-    if (!orders.length) return '';
-    let h = `<div class="tbl-wrap"><table><thead><tr>
-      <th>Stop #</th><th>Customer</th><th>Product</th>
-      <th>Qty</th><th>Oz</th><th>Unit $</th><th>Total $</th>
-      <th>Order Status</th><th>Invoice</th>
-    </tr></thead><tbody>`;
+  const buildPackRows = (orders, details, isCancelled) => {
+    let rows = '';
     orders.forEach(ord => {
-      const prefs  = clientPrefs[ord.client_name] || {};
-      const invTxt = prefs.bring_invoice === 'Y'
+      const prefs   = clientPrefs[ord.client_name] || {};
+      const invTxt  = prefs.bring_invoice === 'Y'
         ? '<span class="inv-yes">Yes</span>' : '<span class="inv-no">No</span>';
-      const stopCell = ord.stop_number
-        ? `<span class="stop-num">${ord.stop_number}</span>` : '—';
-      const items = todayDetails.filter(d => d.order === ord.id);
-      const rowClass = isCancelled ? ' class="row-cancelled"' : '';
-
-      if (!items.length) {
-        h += `<tr${rowClass}><td>${stopCell}</td><td class="customer-name">${ord.client_name}</td>
-          <td colspan="5" class="empty">No items</td>
-          <td>${statusPill(ord.status)}</td><td>${invTxt}</td></tr>`;
-      } else {
-        let stopTotal = 0;
-        items.forEach((it, i) => {
-          const lineTotal = parseFloat(it.total_price) || 0;
-          stopTotal += lineTotal;
-          h += `<tr${rowClass}>
-            <td>${i===0 ? stopCell : ''}</td>
-            <td class="customer-name">${i===0 ? ord.client_name : ''}</td>
-            <td>${it.product_name||'—'}</td>
-            <td>${it.quantity_boxes||0}</td>
-            <td>${it.total_ounces||0}</td>
-            <td>${it.unit_price ? '$'+parseFloat(it.unit_price).toFixed(2) : '—'}</td>
-            <td>${lineTotal ? '$'+lineTotal.toFixed(2) : '—'}</td>
-            <td>${i===0 ? statusPill(ord.status) : ''}</td>
-            <td>${i===0 ? invTxt : ''}</td>
-          </tr>`;
-        });
-        if (!isCancelled && stopTotal > 0) {
-          h += `<tr class="subtotal-row">
-            <td colspan="6" style="text-align:right;color:#666">Stop subtotal</td>
-            <td class="subtotal-val">$${stopTotal.toFixed(2)}</td>
-            <td colspan="2"></td>
-          </tr>`;
-        }
-      }
+      const stopCell = ord.stop_number ? `<span class="stop-num">${ord.stop_number}</span>` : '—';
+      // For pack-out: only show upcoming items per order
+      const items = isCancelled
+        ? details.filter(d => d.order === ord.id)
+        : details.filter(d => d.order === ord.id && (d.status||'').toLowerCase().includes('upcoming'));
+      const rowCls = isCancelled ? ' class="row-cancelled"' : '';
+      if (!items.length) return; // skip orders with no matching items
+      let stopTotal = 0;
+      items.forEach((it, i) => {
+        const lineTotal = parseFloat(it.total_price)||0;
+        stopTotal += lineTotal;
+        rows += `<tr${rowCls}>
+          <td>${it.product_name||'—'}</td>
+          <td><span class="qty-badge">${it.quantity_boxes||0}</span></td>
+          <td class="customer-col">${ord.client_name}</td>
+          <td>${statusDot(it.status)}</td>
+        </tr>`;
+      });
     });
-    return h + '</tbody></table></div>';
+    return rows;
   };
 
+  const activeRows = buildPackRows(sortedOrders, todayDetails, false);
   let packHtml = '';
-  if (!sortedActive.length && !cancelledOrders.length) {
-    packHtml = '<div class="empty">No orders for this date.</div>';
+  if (!activeRows) {
+    packHtml = '<div class="empty">No upcoming items to pack for this date.</div>';
   } else {
-    packHtml = buildPackTable(sortedActive, false);
+    packHtml = `<div class="tbl-wrap"><table>
+      <thead><tr>
+        <th>Product</th><th>Total Qty</th><th>Customer</th><th>Status</th>
+      </tr></thead>
+      <tbody>${activeRows}</tbody>
+    </table></div>`;
     if (cancelledOrders.length) {
-      packHtml += `
-        <div class="cancelled-section">
+      const cancelRows = buildPackRows(cancelledOrders, todayDetails, true);
+      if (cancelRows) {
+        packHtml += `<div class="cancelled-section">
           <button class="cancelled-toggle" onclick="toggleCancelled()">
-            <span id="cancelChevron">▶</span> ${cancelledOrders.length} cancelled order${cancelledOrders.length>1?'s':''}
+            <span id="cancelChevron">▶</span>
+            ${cancelledOrders.length} cancelled order${cancelledOrders.length>1?'s':''}
           </button>
           <div id="cancelledBody" style="display:none">
-            ${buildPackTable(cancelledOrders, true)}
+            <div class="tbl-wrap"><table>
+              <thead><tr><th>Product</th><th>Total Qty</th><th>Customer</th><th>Status</th></tr></thead>
+              <tbody>${cancelRows}</tbody>
+            </table></div>
           </div>
         </div>`;
+      }
     }
   }
   document.getElementById('packout-body').innerHTML = packHtml;
@@ -421,38 +446,36 @@ function renderForDate(viewDate) {
   } else {
     const tbl = harvests.filter(b => /^M[12]/i.test(b.rack||'')).length > 0
       ? harvests.filter(b => /^M[12]/i.test(b.rack||'')) : harvests;
-    let hHtml = `<div class="tbl-wrap"><table><thead><tr>
-      <th>Rack</th><th>Trays Harvested</th><th>Batch</th><th>Time</th>
-    </tr></thead><tbody>`;
+    let h = `<div class="tbl-wrap"><table>
+      <thead><tr><th>Rack</th><th>Trays Harvested</th><th>Batch</th><th>Time</th></tr></thead><tbody>`;
     tbl.forEach(b => {
-      hHtml += `<tr>
+      h += `<tr>
         <td>${simplifyRack(b.rack)}</td>
         <td>${yieldCell(b)}</td>
         <td>${b.name||'—'}</td>
         <td>${b.optimal_harvest_time ? b.optimal_harvest_time.replace(':00','') : '—'}</td>
       </tr>`;
     });
-    document.getElementById('harvest-body').innerHTML = hHtml + '</tbody></table></div>';
+    document.getElementById('harvest-body').innerHTML = h + '</tbody></table></div>';
   }
 
   // ── LABELS ──
-  const totalLabels = labelsToday.length + labelsTmr.length;
-  document.getElementById('badge-labels').textContent = totalLabels;
-  if (!totalLabels) {
+  const totalLbls = labelsToday.length + labelsTmr.length;
+  document.getElementById('badge-labels').textContent = totalLbls;
+  if (!totalLbls) {
     document.getElementById('labels-body').innerHTML = '<div class="empty">No unprinted labels for this date or next day.</div>';
   } else {
     let lHtml = '';
     [[todayStr, labelsToday],[tmrStr, labelsTmr]].forEach(([ds, items]) => {
       if (!items.length) return;
       const sorted = [...items].sort((a,b) => (a.product_name||'').localeCompare(b.product_name||''));
-      lHtml += `<div class="date-group">${ds}</div>`;
-      lHtml += `<div class="tbl-wrap"><table><thead><tr>
-        <th>Product</th><th>Customer</th><th>Qty</th><th>Oz</th>
-      </tr></thead><tbody>`;
+      lHtml += `<div class="date-group">${ds}</div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Product</th><th>Customer</th><th>Qty</th><th>Oz</th></tr></thead><tbody>`;
       sorted.forEach(l => {
         lHtml += `<tr>
           <td>${l.product_name||'—'}</td>
-          <td style="color:#888">${l.client_name||'—'}</td>
+          <td class="customer-col">${l.client_name||'—'}</td>
           <td>${l.quantity_boxes||0}</td>
           <td>${l.total_ounces||0}</td>
         </tr>`;
@@ -467,7 +490,7 @@ function renderForDate(viewDate) {
   [...todayDetails, ...tmrDetails].forEach(d => {
     const v = varMap[d.variety];
     if (!v || v['mix?'] === 'Y') return;
-    const oz = parseFloat(d.total_ounces) || 0;
+    const oz = parseFloat(d.total_ounces)||0;
     if (!oz) return;
     ozMap[v.name||d.variety] = (ozMap[v.name||d.variety]||0) + oz;
   });
@@ -475,13 +498,12 @@ function renderForDate(viewDate) {
   if (!ozEntries.length) {
     document.getElementById('oz-body').innerHTML = '<div class="empty">No oz data.</div>';
   } else {
-    let ozHtml = `<div class="tbl-wrap"><table><thead><tr>
-      <th>Variety</th><th>Total Oz Needed</th>
-    </tr></thead><tbody>`;
-    ozEntries.forEach(([name, oz]) => {
-      ozHtml += `<tr><td>${name}</td><td class="oz-total">${oz} oz</td></tr>`;
+    let oz = `<div class="tbl-wrap"><table>
+      <thead><tr><th>Variety</th><th>Total Oz Needed</th></tr></thead><tbody>`;
+    ozEntries.forEach(([name, val]) => {
+      oz += `<tr><td>${name}</td><td class="oz-total">${val} oz</td></tr>`;
     });
-    document.getElementById('oz-body').innerHTML = ozHtml + '</tbody></table></div>';
+    document.getElementById('oz-body').innerHTML = oz + '</tbody></table></div>';
   }
 
   // ── PLANTINGS ──
@@ -497,17 +519,16 @@ function renderForDate(viewDate) {
   if (!nonLettuceNonMix.length) {
     document.getElementById('plant-body').innerHTML = '<div class="empty">No plantings for this date.</div>';
   } else {
-    let pHtml = `<div class="tbl-wrap"><table><thead><tr>
-      <th>Batch</th><th>Variety</th><th>Trays</th>
-    </tr></thead><tbody>`;
+    let p = `<div class="tbl-wrap"><table>
+      <thead><tr><th>Batch</th><th>Variety</th><th>Trays</th></tr></thead><tbody>`;
     nonLettuceNonMix.forEach(b => {
-      pHtml += `<tr>
+      p += `<tr>
         <td>${b.name||'—'}</td>
         <td>${varMap[b.variety]?.name||b.variety}</td>
         <td>${b.number_of_trays||'?'}</td>
       </tr>`;
     });
-    document.getElementById('plant-body').innerHTML = pHtml + '</tbody></table></div>';
+    document.getElementById('plant-body').innerHTML = p + '</tbody></table></div>';
   }
 
   // ── TOMORROW ──
@@ -518,50 +539,50 @@ function renderForDate(viewDate) {
   if (!sortedTmr.length) {
     document.getElementById('tomorrow-body').innerHTML = '<div class="empty">No orders for next day.</div>';
   } else {
-    let tHtml = `<div class="tbl-wrap"><table><thead><tr>
-      <th>Stop #</th><th>Customer</th><th>Product</th>
-      <th>Qty</th><th>Oz</th><th>Unit $</th><th>Total $</th><th>Status</th><th>Invoice</th>
-    </tr></thead><tbody>`;
+    let t = `<div class="tbl-wrap"><table>
+      <thead><tr>
+        <th>Stop #</th><th>Customer</th><th>Product</th>
+        <th>Qty</th><th>Oz</th><th>Unit $</th><th>Total $</th><th>Status</th><th>Invoice</th>
+      </tr></thead><tbody>`;
     sortedTmr.forEach(ord => {
-      const prefs  = clientPrefs[ord.client_name] || {};
+      const prefs  = clientPrefs[ord.client_name]||{};
       const invTxt = prefs.bring_invoice === 'Y'
         ? '<span class="inv-yes">Yes</span>' : '<span class="inv-no">No</span>';
       const stopCell = ord.stop_number ? `<span class="stop-num">${ord.stop_number}</span>` : '—';
       const items = tmrDetails.filter(d => d.order === ord.id);
       let stopTotal = 0;
       if (!items.length) {
-        tHtml += `<tr><td>${stopCell}</td><td class="customer-name">${ord.client_name}</td>
+        t += `<tr><td>${stopCell}</td><td>${ord.client_name}</td>
           <td colspan="5" class="empty">No items</td>
           <td>${statusPill(ord.status)}</td><td>${invTxt}</td></tr>`;
       } else {
         items.forEach((it, i) => {
-          const lineTotal = parseFloat(it.total_price) || 0;
-          stopTotal += lineTotal;
-          tHtml += `<tr>
-            <td>${i===0 ? stopCell : ''}</td>
-            <td class="customer-name">${i===0 ? ord.client_name : ''}</td>
+          const lt = parseFloat(it.total_price)||0; stopTotal += lt;
+          t += `<tr>
+            <td>${i===0?stopCell:''}</td>
+            <td class="customer-col" style="font-weight:${i===0?'600':'400'};color:${i===0?'#333':'#bbb'}">${i===0?ord.client_name:''}</td>
             <td>${it.product_name||'—'}</td>
-            <td>${it.quantity_boxes||0}</td>
+            <td><span class="qty-badge">${it.quantity_boxes||0}</span></td>
             <td>${it.total_ounces||0}</td>
-            <td>${it.unit_price ? '$'+parseFloat(it.unit_price).toFixed(2) : '—'}</td>
-            <td>${parseFloat(it.total_price||0).toFixed(2) ? '$'+parseFloat(it.total_price||0).toFixed(2) : '—'}</td>
-            <td>${i===0 ? statusPill(ord.status) : ''}</td>
-            <td>${i===0 ? invTxt : ''}</td>
+            <td>${it.unit_price?'$'+parseFloat(it.unit_price).toFixed(2):'—'}</td>
+            <td>${lt?'$'+lt.toFixed(2):'—'}</td>
+            <td>${i===0?statusPill(ord.status):''}</td>
+            <td>${i===0?invTxt:''}</td>
           </tr>`;
         });
-        if (stopTotal > 0) {
-          tHtml += `<tr class="subtotal-row">
-            <td colspan="6" style="text-align:right;color:#666">Stop subtotal</td>
+        if (stopTotal>0) {
+          t += `<tr class="subtotal-row">
+            <td colspan="6" style="text-align:right">Stop subtotal</td>
             <td class="subtotal-val">$${stopTotal.toFixed(2)}</td>
             <td colspan="2"></td>
           </tr>`;
         }
       }
     });
-    document.getElementById('tomorrow-body').innerHTML = tHtml + '</tbody></table></div>';
+    document.getElementById('tomorrow-body').innerHTML = t + '</tbody></table></div>';
   }
 
-  // Re-apply active filter if one was set
+  // Re-apply active filter if set
   if (activeFilter) {
     const targets = activeFilter.split(',');
     ALL_SECTIONS.forEach(id => {
@@ -570,21 +591,22 @@ function renderForDate(viewDate) {
   }
 }
 
-// ── CANCELLED TOGGLE ──────────────────────────────────────────────────────────
 function toggleCancelled() {
   const body = document.getElementById('cancelledBody');
   const chev = document.getElementById('cancelChevron');
   if (!body) return;
   const open = body.style.display === 'none';
   body.style.display = open ? 'block' : 'none';
-  chev.textContent = open ? '▼' : '▶';
+  if (chev) chev.textContent = open ? '▼' : '▶';
 }
 
-// ── MAIN LOAD ─────────────────────────────────────────────────────────────────
+// ── LOAD ──────────────────────────────────────────────────────────────────────
 async function loadData() {
-  document.getElementById('refreshBtn').disabled = true;
-  document.getElementById('refreshBtn').textContent = '⏳ Loading…';
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Loading…';
   document.getElementById('error-msg').style.display = 'none';
+  document.getElementById('warnBadge').style.display = 'none';
 
   try {
     const [sliceAll, ordersAll, detailAll, batchAll, varietyAll, clientAll] = await Promise.all([
@@ -612,25 +634,30 @@ async function loadData() {
         d.client_name = orderMap[d.order].client_name || '';
     });
 
-    __store = {
-      sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap,
-      fetchedAt: new Date().toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'})
-    };
+    __store = { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap };
 
     document.getElementById('loading').style.display = 'none';
     document.getElementById('content').style.display  = 'block';
-
     renderForDate(__viewDate);
 
   } catch(err) {
-    const errEl = document.getElementById('error-msg');
-    errEl.textContent = '⚠️ ' + err.message;
-    errEl.style.display = 'block';
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('content').style.display  = 'block';
+    if (__store) {
+      // have cached data — show warning and re-render with what we have
+      document.getElementById('warnBadge').style.display = 'inline-block';
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('content').style.display  = 'block';
+      renderForDate(__viewDate);
+    } else {
+      const errEl = document.getElementById('error-msg');
+      errEl.textContent = '⚠️ ' + err.message;
+      errEl.style.display = 'block';
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('content').style.display  = 'block';
+    }
   } finally {
-    document.getElementById('refreshBtn').disabled = false;
-    document.getElementById('refreshBtn').textContent = '↻ Refresh';
+    btn.disabled = false;
+    btn.textContent = '⚡ Refresh';
+    btn.innerHTML = '⚡ Refresh';
   }
 }
 
