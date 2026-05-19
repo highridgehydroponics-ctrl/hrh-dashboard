@@ -7,58 +7,133 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; padding: 16px; }
-  h1 { font-size: 1.4rem; color: #fff; margin-bottom: 4px; }
-  .subtitle { color: #888; font-size: 0.85rem; margin-bottom: 16px; }
-  .header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-  button#refreshBtn { background: #2a6496; color: #fff; border: none; padding: 7px 16px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
-  button#refreshBtn:hover { background: #3a7ab6; }
-  button#refreshBtn:disabled { background: #444; cursor: default; }
+  h1 { font-size: 1.4rem; color: #fff; margin-bottom: 2px; }
+  .subtitle { color: #888; font-size: 0.85rem; }
+  .header-row { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; gap: 12px; }
+  .header-btns { display: flex; gap: 8px; align-items: center; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+  button { border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+  #refreshBtn  { background: #2a6496; color: #fff; }
+  #refreshBtn:hover { background: #3a7ab6; }
+  #refreshBtn:disabled { background: #444; cursor: default; }
+  #showAllBtn  { background: #2a2d3a; color: #aaa; display: none; }
+  #showAllBtn:hover { background: #3a3d4a; color: #fff; }
+  #printBtn    { background: #2a3a2a; color: #66bb6a; }
+  #printBtn:hover { background: #3a4a3a; }
 
-  /* KPI bar */
+  /* Date navigation */
+  .date-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .date-nav button { background: #1a1d27; color: #aaa; padding: 5px 12px; font-size: 0.9rem; }
+  .date-nav button:hover { background: #2a2d3a; color: #fff; }
+  #dateDisplay { font-size: 1rem; font-weight: 600; color: #fff; min-width: 110px; text-align: center; }
+  #todayBtn { background: #1a2a3a; color: #4fc3f7; font-size: 0.75rem; padding: 4px 10px; }
+  #todayBtn:hover { background: #2a3a4a; }
+
+  /* KPI cards */
   .kpi-bar { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
-  .kpi { background: #1a1d27; border-radius: 8px; padding: 12px 18px; flex: 1; min-width: 120px; }
-  .kpi-val { font-size: 2rem; font-weight: 700; color: #4fc3f7; }
+  .kpi { background: #1a1d27; border-radius: 8px; padding: 12px 18px; flex: 1; min-width: 120px;
+    cursor: pointer; user-select: none; border: 2px solid transparent;
+    transition: border-color .15s, background .15s, transform .1s; }
+  .kpi:hover { background: #22263a; border-color: #2a6496; transform: translateY(-1px); }
+  .kpi.active { background: #0d2035; border-color: #4fc3f7; }
+  .kpi.active .kpi-label { color: #4fc3f7; }
+  .kpi-val   { font-size: 2rem; font-weight: 700; color: #4fc3f7; }
   .kpi-label { font-size: 0.75rem; color: #888; margin-top: 2px; }
+  .kpi-hint  { font-size: 0.65rem; color: #555; margin-top: 4px; }
 
   /* Sections */
   .section { background: #1a1d27; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
-  .section-title { font-size: 1rem; font-weight: 600; color: #fff; margin-bottom: 12px; border-bottom: 1px solid #2a2d3a; padding-bottom: 8px; }
-  .section-title span.badge { background: #2a3a4a; color: #4fc3f7; font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; margin-left: 8px; font-weight: 400; }
+  .section-title { font-size: 1rem; font-weight: 600; color: #fff; margin-bottom: 12px;
+    border-bottom: 1px solid #2a2d3a; padding-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .section-title span.badge { background: #2a3a4a; color: #4fc3f7; font-size: 0.75rem;
+    padding: 2px 8px; border-radius: 10px; font-weight: 400; }
 
-  /* Tables */
-  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-  th { text-align: left; color: #888; font-weight: 500; padding: 6px 8px; border-bottom: 1px solid #2a2d3a; white-space: nowrap; }
-  td { padding: 7px 8px; border-bottom: 1px solid #1e2130; vertical-align: top; }
+  /* Table wrapper — horizontal scroll on mobile */
+  .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 480px; }
+  th { text-align: left; color: #888; font-weight: 500; padding: 6px 8px;
+    border-bottom: 1px solid #2a2d3a; white-space: nowrap; }
+  td { padding: 7px 8px; border-bottom: 1px solid #1e2130; vertical-align: middle; }
   tr:last-child td { border-bottom: none; }
   tr:hover td { background: #1e2130; }
 
-  /* Customer group headers */
-  .stop-header { background: #1e2535; font-weight: 600; color: #b0c4de; }
-  .stop-header td { padding: 8px; border-bottom: 1px solid #2a2d3a; }
-  .stop-num { display: inline-block; background: #2a6496; color: #fff; font-size: 0.7rem; padding: 2px 6px; border-radius: 10px; margin-right: 6px; }
-  .inv-yes { color: #66bb6a; font-size: 0.8rem; }
-  .inv-no { color: #555; font-size: 0.8rem; }
+  /* Pack-out */
+  .stop-num { display: inline-block; background: #2a6496; color: #fff; font-size: 0.72rem;
+    padding: 2px 7px; border-radius: 10px; font-weight: 600; }
+  .customer-name { font-weight: 600; color: #b0c4de; white-space: nowrap; }
+  .subtotal-row td { border-top: 1px solid #2a2d3a; color: #aaa; font-style: italic; font-size: 0.8rem; }
+  .subtotal-val { color: #fff; font-weight: 600; font-style: normal; }
+
+  /* Cancelled section */
+  .cancelled-toggle { background: none; border: none; color: #666; font-size: 0.8rem;
+    cursor: pointer; padding: 6px 0; display: flex; align-items: center; gap: 6px; }
+  .cancelled-toggle:hover { color: #aaa; }
+  .cancelled-section { margin-top: 12px; border-top: 1px solid #2a2d3a; padding-top: 10px; }
+  tr.row-cancelled td { opacity: 0.45; text-decoration: line-through; }
 
   /* Status pills */
   .pill { display: inline-block; font-size: 0.7rem; padding: 2px 7px; border-radius: 10px; white-space: nowrap; }
-  .pill-packed { background: #1b4a1b; color: #66bb6a; }
-  .pill-upcoming { background: #1a3a4a; color: #4fc3f7; }
+  .pill-packed    { background: #1b4a1b; color: #66bb6a; }
+  .pill-upcoming  { background: #1a3a4a; color: #4fc3f7; }
   .pill-cancelled { background: #3a1a1a; color: #ef5350; }
 
-  /* Date group */
-  .date-group { font-weight: 600; color: #aaa; font-size: 0.8rem; padding: 6px 0 4px; border-top: 1px solid #2a2d3a; margin-top: 8px; }
+  /* Invoice */
+  .inv-yes { color: #66bb6a; font-weight: 600; }
+  .inv-no  { color: #555; }
+
+  /* Harvest yield */
+  .yield-wrap { display: flex; align-items: center; gap: 6px; }
+  .yield-input { width: 44px; background: #0f1117; border: 1px solid #2a6496; border-radius: 4px;
+    color: #4fc3f7; font-size: 0.85rem; padding: 2px 5px; text-align: center; }
+  .yield-input:focus { outline: none; border-color: #4fc3f7; }
+  .yield-of { color: #555; font-size: 0.8rem; }
+  .yield-bar-wrap { width: 60px; background: #2a2d3a; border-radius: 4px; height: 6px; overflow: hidden; }
+  .yield-bar { height: 100%; background: #4fc3f7; border-radius: 4px; transition: width .3s; }
+
+  /* Date groups (labels) */
+  .date-group { font-weight: 600; color: #aaa; font-size: 0.8rem;
+    padding: 8px 0 4px; border-top: 1px solid #2a2d3a; margin-top: 8px; }
   .date-group:first-child { margin-top: 0; border-top: none; }
 
-  /* Oz table highlight */
+  /* Oz */
   .oz-total { font-weight: 600; color: #fff; }
 
-  /* Empty state */
+  /* Empty */
   .empty { color: #555; font-size: 0.85rem; padding: 10px 0; }
 
   /* Loading / error */
-  #loading { text-align: center; padding: 60px; color: #888; }
-  #error-msg { background: #3a1a1a; color: #ef5350; border-radius: 8px; padding: 14px; margin-bottom: 16px; display: none; }
-  #content { display: none; }
+  #loading  { text-align: center; padding: 60px; color: #888; }
+  #error-msg { background: #3a1a1a; color: #ef5350; border-radius: 8px;
+    padding: 14px; margin-bottom: 16px; display: none; }
+  #content  { display: none; }
+
+  /* Print styles */
+  @media print {
+    body { background: #fff; color: #000; padding: 8px; font-size: 11px; }
+    .header-btns, .date-nav, .kpi-bar, #showAllBtn, #printBtn,
+    .kpi-hint, .cancelled-toggle { display: none !important; }
+    h1 { font-size: 1.1rem; color: #000; }
+    .subtitle { color: #555; }
+    .section { background: #fff; border: 1px solid #ccc; border-radius: 0;
+      padding: 10px; margin-bottom: 10px; break-inside: avoid; }
+    .section-title { color: #000; border-bottom: 1px solid #ccc; }
+    .section-title .badge { background: #eee; color: #333; }
+    th { color: #555; border-bottom: 1px solid #ccc; }
+    td { border-bottom: 1px solid #eee; color: #000; }
+    .stop-num { background: #333; }
+    .customer-name { color: #000; }
+    .pill-packed   { background: #d4edda; color: #155724; }
+    .pill-upcoming { background: #d1ecf1; color: #0c5460; }
+    .pill-cancelled{ background: #f8d7da; color: #721c24; }
+    .inv-yes { color: #155724; }
+    .inv-no  { color: #999; }
+    .yield-input { border: 1px solid #ccc; color: #000; background: #fff; }
+    .yield-bar-wrap { background: #eee; }
+    .yield-bar { background: #333; }
+    .subtotal-row td { color: #555; }
+    .subtotal-val { color: #000; }
+    tr.row-cancelled td { opacity: 0.4; }
+    .tbl-wrap { overflow: visible; }
+  }
 </style>
 </head>
 <body>
@@ -66,12 +141,24 @@
 <div id="loading">⏳ Loading fresh data from AppSheet...</div>
 <div id="error-msg"></div>
 <div id="content">
+
   <div class="header-row">
     <div>
       <h1>🌱 HRH Morning Rundown</h1>
       <div class="subtitle" id="subtitle"></div>
     </div>
-    <button id="refreshBtn" onclick="loadData()">↻ Refresh</button>
+    <div class="header-btns">
+      <button id="showAllBtn" onclick="showAll()">✕ Show All</button>
+      <button id="printBtn" onclick="window.print()">🖨 Print</button>
+      <button id="refreshBtn" onclick="loadData()">↻ Refresh</button>
+    </div>
+  </div>
+
+  <div class="date-nav">
+    <button onclick="shiftDate(-1)">←</button>
+    <span id="dateDisplay"></span>
+    <button onclick="shiftDate(1)">→</button>
+    <button id="todayBtn" onclick="goToday()">Today</button>
   </div>
 
   <div class="kpi-bar" id="kpiBar"></div>
@@ -92,7 +179,7 @@
   </div>
 
   <div class="section" id="sec-oz">
-    <div class="section-title">⚖️ Oz Needed by Variety (Today + Tomorrow)</div>
+    <div class="section-title">⚖️ Oz Needed by Variety <span style="color:#555;font-weight:400;font-size:0.8rem">(selected + next day)</span></div>
     <div id="oz-body"></div>
   </div>
 
@@ -105,6 +192,7 @@
     <div class="section-title">📋 Tomorrow's Orders <span class="badge" id="badge-tmr"></span></div>
     <div id="tomorrow-body"></div>
   </div>
+
 </div>
 
 <script>
@@ -112,8 +200,57 @@ const ORDERS = { appId: 'bea55701-8006-4581-a791-19a75092943f', apiKey: 'V2-f4zl
 const GR     = { appId: 'fe7f55b7-a021-4f49-a9cb-c5528e8de84e', apiKey: 'V2-yQryr-d6cw2-Th5B2-TE8Na-aNKjx-YAnBI-K7AzT-iVWEh' };
 const GC     = { appId: '0ddb09d1-5e1c-434e-9e6e-ce46a54cd628', apiKey: 'V2-tSZCd-mCmE9-JdcyR-TIS5Q-grSxm-EKYUM-EkcIV-0CHoS' };
 
-function fmt(d) { return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}`; }
+const ALL_SECTIONS = ['sec-packout','sec-harvest','sec-labels','sec-oz','sec-plant','sec-tomorrow'];
+let activeFilter = null;
+let __store = null;         // full raw data after first fetch
+let __viewDate = new Date(); // currently displayed date
 
+// ── DATE HELPERS ──────────────────────────────────────────────────────────────
+function fmt(d) {
+  return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}`;
+}
+function fmtDisplay(d) {
+  return d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+}
+function addDays(d, n) {
+  const r = new Date(d); r.setDate(r.getDate() + n); return r;
+}
+function isToday(d) {
+  const t = new Date();
+  return d.getFullYear()===t.getFullYear() && d.getMonth()===t.getMonth() && d.getDate()===t.getDate();
+}
+
+function shiftDate(n) {
+  __viewDate = addDays(__viewDate, n);
+  renderForDate(__viewDate);
+}
+function goToday() {
+  __viewDate = new Date();
+  renderForDate(__viewDate);
+}
+
+// ── FILTER LOGIC ──────────────────────────────────────────────────────────────
+function filterSection(card) {
+  const target = card.dataset.target;
+  if (activeFilter === target) { showAll(); return; }
+  activeFilter = target;
+  document.querySelectorAll('.kpi').forEach(k => k.classList.remove('active'));
+  card.classList.add('active');
+  const targets = target.split(',');
+  ALL_SECTIONS.forEach(id => {
+    document.getElementById(id).style.display = targets.includes(id) ? 'block' : 'none';
+  });
+  document.getElementById('showAllBtn').style.display = 'inline-block';
+}
+
+function showAll() {
+  activeFilter = null;
+  document.querySelectorAll('.kpi').forEach(k => k.classList.remove('active'));
+  ALL_SECTIONS.forEach(id => { document.getElementById(id).style.display = 'block'; });
+  document.getElementById('showAllBtn').style.display = 'none';
+}
+
+// ── APPSHEET FETCH ────────────────────────────────────────────────────────────
 async function appFetch(creds, table) {
   const url = `https://api.appsheet.com/api/v2/apps/${creds.appId}/tables/${encodeURIComponent(table)}/Action`;
   const r = await fetch(url, {
@@ -121,38 +258,335 @@ async function appFetch(creds, table) {
     headers: { 'ApplicationAccessKey': creds.apiKey, 'Content-Type': 'application/json' },
     body: JSON.stringify({ Action: 'Find', Properties: {}, Rows: [] })
   });
-  if (!r.ok) throw new Error(`AppSheet error on ${table}: ${r.status}`);
+  if (!r.ok) throw new Error(`AppSheet error on "${table}": ${r.status}`);
   const t = await r.text();
   return t.trim() ? JSON.parse(t) : [];
 }
 
+// ── RENDER HELPERS ────────────────────────────────────────────────────────────
 function simplifyRack(s) {
   if (!s) return '—';
-  return s.split(',').map(p => {
-    p = p.trim().replace(/^[^-]+-/, '').replace(/\(\d+\)$/, '').trim();
-    return p;
-  }).filter(Boolean).join(', ') || '—';
+  return s.split(',').map(p =>
+    p.trim().replace(/^[^-]+-/, '').replace(/\(\d+\)$/, '').trim()
+  ).filter(Boolean).join(', ') || '—';
 }
 
 function statusPill(s) {
   if (!s) return '';
-  const low = s.toLowerCase();
-  if (low.includes('packed')) return `<span class="pill pill-packed">Packed</span>`;
-  if (low.includes('cancel')) return `<span class="pill pill-cancelled">Cancelled</span>`;
+  const l = s.toLowerCase();
+  if (l.includes('packed'))  return `<span class="pill pill-packed">Packed</span>`;
+  if (l.includes('cancel'))  return `<span class="pill pill-cancelled">Cancelled</span>`;
   return `<span class="pill pill-upcoming">Upcoming</span>`;
 }
 
+function yieldCell(b) {
+  const total = parseInt(b.number_of_trays) || 0;
+  const done  = parseInt(b.number_trays_harvested) || 0;
+  const pct   = total > 0 ? Math.min(100, Math.round(done/total*100)) : 0;
+  const id    = 'yld_' + b.id;
+  return `<div class="yield-wrap">
+    <input class="yield-input" id="${id}" type="number" min="0" max="${total}" value="${done}"
+      onchange="updateYield(this, ${total})" title="Trays harvested">
+    <span class="yield-of">/ ${total}</span>
+    <div class="yield-bar-wrap"><div class="yield-bar" id="bar_${b.id}" style="width:${pct}%"></div></div>
+  </div>`;
+}
+
+function updateYield(input, total) {
+  const val = Math.min(total, Math.max(0, parseInt(input.value)||0));
+  input.value = val;
+  const bar = document.getElementById('bar_' + input.id.replace('yld_',''));
+  if (bar) bar.style.width = (total > 0 ? Math.round(val/total*100) : 0) + '%';
+}
+
+// ── RENDER FOR DATE ────────────────────────────────────────────────────────────
+function renderForDate(viewDate) {
+  if (!__store) return;
+  const { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap } = __store;
+
+  const todayStr  = fmt(viewDate);
+  const tmrStr    = fmt(addDays(viewDate, 1));
+
+  document.getElementById('dateDisplay').textContent = fmtDisplay(viewDate);
+  document.getElementById('todayBtn').style.display = isToday(viewDate) ? 'none' : 'inline-block';
+  document.getElementById('subtitle').textContent =
+    `${todayStr}  •  Data fetched at ${__store.fetchedAt}`;
+
+  const todayOrders  = ordersAll.filter(o => o.fulfillment_date === todayStr);
+  const todayDetails = detailAll.filter(d => d.fulfillment_date === todayStr);
+  const tmrOrders    = ordersAll.filter(o => o.fulfillment_date === tmrStr);
+  const tmrDetails   = detailAll.filter(d => d.fulfillment_date === tmrStr);
+  const labelsToday  = sliceAll.filter(r => r.fulfillment_date === todayStr);
+  const labelsTmr    = sliceAll.filter(r => r.fulfillment_date === tmrStr);
+  const harvests     = batchAll.filter(b => (b.optimal_harvest_date||'').trim() === todayStr && b.status_name === 'Being Harvested');
+  const plantings    = batchAll.filter(b => (b.optimal_planting_date||'').trim() === todayStr);
+
+  const activeOrders    = todayOrders.filter(o => !o.status.toLowerCase().includes('cancel'));
+  const cancelledOrders = todayOrders.filter(o =>  o.status.toLowerCase().includes('cancel'));
+  const activeItems     = todayDetails.filter(d => !d.status.toLowerCase().includes('cancel'));
+
+  // ── KPI BAR ──
+  const kpiDefs = [
+    { val: activeOrders.length,  label: 'Stops Today',      target: 'sec-packout' },
+    { val: activeItems.length,   label: 'Items to Pack',    target: 'sec-packout' },
+    { val: harvests.length,      label: 'Harvests Today',   target: 'sec-harvest' },
+    { val: tmrOrders.length,     label: "Tomorrow's Stops", target: 'sec-tomorrow' },
+  ];
+  document.getElementById('kpiBar').innerHTML = kpiDefs.map(k =>
+    `<div class="kpi${activeFilter===k.target?' active':''}" data-target="${k.target}" onclick="filterSection(this)">
+      <div class="kpi-val">${k.val}</div>
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-hint">Tap to filter</div>
+    </div>`
+  ).join('');
+
+  // ── PACK-OUT ──
+  document.getElementById('badge-stops').textContent = activeOrders.length;
+  const sortedActive = [...activeOrders].sort((a,b) =>
+    (parseInt(a.stop_number)||9999) - (parseInt(b.stop_number)||9999)
+  );
+
+  const buildPackTable = (orders, isCancelled) => {
+    if (!orders.length) return '';
+    let h = `<div class="tbl-wrap"><table><thead><tr>
+      <th>Stop #</th><th>Customer</th><th>Product</th>
+      <th>Qty</th><th>Oz</th><th>Unit $</th><th>Total $</th>
+      <th>Order Status</th><th>Invoice</th>
+    </tr></thead><tbody>`;
+    orders.forEach(ord => {
+      const prefs  = clientPrefs[ord.client_name] || {};
+      const invTxt = prefs.bring_invoice === 'Y'
+        ? '<span class="inv-yes">Yes</span>' : '<span class="inv-no">No</span>';
+      const stopCell = ord.stop_number
+        ? `<span class="stop-num">${ord.stop_number}</span>` : '—';
+      const items = todayDetails.filter(d => d.order === ord.id);
+      const rowClass = isCancelled ? ' class="row-cancelled"' : '';
+
+      if (!items.length) {
+        h += `<tr${rowClass}><td>${stopCell}</td><td class="customer-name">${ord.client_name}</td>
+          <td colspan="5" class="empty">No items</td>
+          <td>${statusPill(ord.status)}</td><td>${invTxt}</td></tr>`;
+      } else {
+        let stopTotal = 0;
+        items.forEach((it, i) => {
+          const lineTotal = parseFloat(it.total_price) || 0;
+          stopTotal += lineTotal;
+          h += `<tr${rowClass}>
+            <td>${i===0 ? stopCell : ''}</td>
+            <td class="customer-name">${i===0 ? ord.client_name : ''}</td>
+            <td>${it.product_name||'—'}</td>
+            <td>${it.quantity_boxes||0}</td>
+            <td>${it.total_ounces||0}</td>
+            <td>${it.unit_price ? '$'+parseFloat(it.unit_price).toFixed(2) : '—'}</td>
+            <td>${lineTotal ? '$'+lineTotal.toFixed(2) : '—'}</td>
+            <td>${i===0 ? statusPill(ord.status) : ''}</td>
+            <td>${i===0 ? invTxt : ''}</td>
+          </tr>`;
+        });
+        if (!isCancelled && stopTotal > 0) {
+          h += `<tr class="subtotal-row">
+            <td colspan="6" style="text-align:right;color:#666">Stop subtotal</td>
+            <td class="subtotal-val">$${stopTotal.toFixed(2)}</td>
+            <td colspan="2"></td>
+          </tr>`;
+        }
+      }
+    });
+    return h + '</tbody></table></div>';
+  };
+
+  let packHtml = '';
+  if (!sortedActive.length && !cancelledOrders.length) {
+    packHtml = '<div class="empty">No orders for this date.</div>';
+  } else {
+    packHtml = buildPackTable(sortedActive, false);
+    if (cancelledOrders.length) {
+      packHtml += `
+        <div class="cancelled-section">
+          <button class="cancelled-toggle" onclick="toggleCancelled()">
+            <span id="cancelChevron">▶</span> ${cancelledOrders.length} cancelled order${cancelledOrders.length>1?'s':''}
+          </button>
+          <div id="cancelledBody" style="display:none">
+            ${buildPackTable(cancelledOrders, true)}
+          </div>
+        </div>`;
+    }
+  }
+  document.getElementById('packout-body').innerHTML = packHtml;
+
+  // ── HARVESTS ──
+  document.getElementById('badge-harvest').textContent = harvests.length;
+  if (!harvests.length) {
+    document.getElementById('harvest-body').innerHTML = '<div class="empty">No harvests scheduled for this date.</div>';
+  } else {
+    const tbl = harvests.filter(b => /^M[12]/i.test(b.rack||'')).length > 0
+      ? harvests.filter(b => /^M[12]/i.test(b.rack||'')) : harvests;
+    let hHtml = `<div class="tbl-wrap"><table><thead><tr>
+      <th>Rack</th><th>Trays Harvested</th><th>Batch</th><th>Time</th>
+    </tr></thead><tbody>`;
+    tbl.forEach(b => {
+      hHtml += `<tr>
+        <td>${simplifyRack(b.rack)}</td>
+        <td>${yieldCell(b)}</td>
+        <td>${b.name||'—'}</td>
+        <td>${b.optimal_harvest_time ? b.optimal_harvest_time.replace(':00','') : '—'}</td>
+      </tr>`;
+    });
+    document.getElementById('harvest-body').innerHTML = hHtml + '</tbody></table></div>';
+  }
+
+  // ── LABELS ──
+  const totalLabels = labelsToday.length + labelsTmr.length;
+  document.getElementById('badge-labels').textContent = totalLabels;
+  if (!totalLabels) {
+    document.getElementById('labels-body').innerHTML = '<div class="empty">No unprinted labels for this date or next day.</div>';
+  } else {
+    let lHtml = '';
+    [[todayStr, labelsToday],[tmrStr, labelsTmr]].forEach(([ds, items]) => {
+      if (!items.length) return;
+      const sorted = [...items].sort((a,b) => (a.product_name||'').localeCompare(b.product_name||''));
+      lHtml += `<div class="date-group">${ds}</div>`;
+      lHtml += `<div class="tbl-wrap"><table><thead><tr>
+        <th>Product</th><th>Customer</th><th>Qty</th><th>Oz</th>
+      </tr></thead><tbody>`;
+      sorted.forEach(l => {
+        lHtml += `<tr>
+          <td>${l.product_name||'—'}</td>
+          <td style="color:#888">${l.client_name||'—'}</td>
+          <td>${l.quantity_boxes||0}</td>
+          <td>${l.total_ounces||0}</td>
+        </tr>`;
+      });
+      lHtml += '</tbody></table></div>';
+    });
+    document.getElementById('labels-body').innerHTML = lHtml;
+  }
+
+  // ── OZ BY VARIETY ──
+  const ozMap = {};
+  [...todayDetails, ...tmrDetails].forEach(d => {
+    const v = varMap[d.variety];
+    if (!v || v['mix?'] === 'Y') return;
+    const oz = parseFloat(d.total_ounces) || 0;
+    if (!oz) return;
+    ozMap[v.name||d.variety] = (ozMap[v.name||d.variety]||0) + oz;
+  });
+  const ozEntries = Object.entries(ozMap).sort((a,b) => b[1]-a[1]);
+  if (!ozEntries.length) {
+    document.getElementById('oz-body').innerHTML = '<div class="empty">No oz data.</div>';
+  } else {
+    let ozHtml = `<div class="tbl-wrap"><table><thead><tr>
+      <th>Variety</th><th>Total Oz Needed</th>
+    </tr></thead><tbody>`;
+    ozEntries.forEach(([name, oz]) => {
+      ozHtml += `<tr><td>${name}</td><td class="oz-total">${oz} oz</td></tr>`;
+    });
+    document.getElementById('oz-body').innerHTML = ozHtml + '</tbody></table></div>';
+  }
+
+  // ── PLANTINGS ──
+  document.getElementById('badge-plant').textContent = plantings.length;
+  const nonLettuceNonMix = plantings.filter(b => {
+    const v = varMap[b.variety];
+    if (!v) return true;
+    if (v['mix?'] === 'Y') return false;
+    if (v.reserve_1 === 'Lettuce') return false;
+    const nm = (v.name||'').toLowerCase();
+    return !nm.includes('lettuce') && !nm.includes('hydro salanova') && !nm.includes('little gem');
+  });
+  if (!nonLettuceNonMix.length) {
+    document.getElementById('plant-body').innerHTML = '<div class="empty">No plantings for this date.</div>';
+  } else {
+    let pHtml = `<div class="tbl-wrap"><table><thead><tr>
+      <th>Batch</th><th>Variety</th><th>Trays</th>
+    </tr></thead><tbody>`;
+    nonLettuceNonMix.forEach(b => {
+      pHtml += `<tr>
+        <td>${b.name||'—'}</td>
+        <td>${varMap[b.variety]?.name||b.variety}</td>
+        <td>${b.number_of_trays||'?'}</td>
+      </tr>`;
+    });
+    document.getElementById('plant-body').innerHTML = pHtml + '</tbody></table></div>';
+  }
+
+  // ── TOMORROW ──
+  document.getElementById('badge-tmr').textContent = tmrOrders.length;
+  const sortedTmr = [...tmrOrders].sort((a,b) =>
+    (parseInt(a.stop_number)||9999) - (parseInt(b.stop_number)||9999)
+  );
+  if (!sortedTmr.length) {
+    document.getElementById('tomorrow-body').innerHTML = '<div class="empty">No orders for next day.</div>';
+  } else {
+    let tHtml = `<div class="tbl-wrap"><table><thead><tr>
+      <th>Stop #</th><th>Customer</th><th>Product</th>
+      <th>Qty</th><th>Oz</th><th>Unit $</th><th>Total $</th><th>Status</th><th>Invoice</th>
+    </tr></thead><tbody>`;
+    sortedTmr.forEach(ord => {
+      const prefs  = clientPrefs[ord.client_name] || {};
+      const invTxt = prefs.bring_invoice === 'Y'
+        ? '<span class="inv-yes">Yes</span>' : '<span class="inv-no">No</span>';
+      const stopCell = ord.stop_number ? `<span class="stop-num">${ord.stop_number}</span>` : '—';
+      const items = tmrDetails.filter(d => d.order === ord.id);
+      let stopTotal = 0;
+      if (!items.length) {
+        tHtml += `<tr><td>${stopCell}</td><td class="customer-name">${ord.client_name}</td>
+          <td colspan="5" class="empty">No items</td>
+          <td>${statusPill(ord.status)}</td><td>${invTxt}</td></tr>`;
+      } else {
+        items.forEach((it, i) => {
+          const lineTotal = parseFloat(it.total_price) || 0;
+          stopTotal += lineTotal;
+          tHtml += `<tr>
+            <td>${i===0 ? stopCell : ''}</td>
+            <td class="customer-name">${i===0 ? ord.client_name : ''}</td>
+            <td>${it.product_name||'—'}</td>
+            <td>${it.quantity_boxes||0}</td>
+            <td>${it.total_ounces||0}</td>
+            <td>${it.unit_price ? '$'+parseFloat(it.unit_price).toFixed(2) : '—'}</td>
+            <td>${parseFloat(it.total_price||0).toFixed(2) ? '$'+parseFloat(it.total_price||0).toFixed(2) : '—'}</td>
+            <td>${i===0 ? statusPill(ord.status) : ''}</td>
+            <td>${i===0 ? invTxt : ''}</td>
+          </tr>`;
+        });
+        if (stopTotal > 0) {
+          tHtml += `<tr class="subtotal-row">
+            <td colspan="6" style="text-align:right;color:#666">Stop subtotal</td>
+            <td class="subtotal-val">$${stopTotal.toFixed(2)}</td>
+            <td colspan="2"></td>
+          </tr>`;
+        }
+      }
+    });
+    document.getElementById('tomorrow-body').innerHTML = tHtml + '</tbody></table></div>';
+  }
+
+  // Re-apply active filter if one was set
+  if (activeFilter) {
+    const targets = activeFilter.split(',');
+    ALL_SECTIONS.forEach(id => {
+      document.getElementById(id).style.display = targets.includes(id) ? 'block' : 'none';
+    });
+  }
+}
+
+// ── CANCELLED TOGGLE ──────────────────────────────────────────────────────────
+function toggleCancelled() {
+  const body = document.getElementById('cancelledBody');
+  const chev = document.getElementById('cancelChevron');
+  if (!body) return;
+  const open = body.style.display === 'none';
+  body.style.display = open ? 'block' : 'none';
+  chev.textContent = open ? '▼' : '▶';
+}
+
+// ── MAIN LOAD ─────────────────────────────────────────────────────────────────
 async function loadData() {
   document.getElementById('refreshBtn').disabled = true;
   document.getElementById('refreshBtn').textContent = '⏳ Loading…';
   document.getElementById('error-msg').style.display = 'none';
 
   try {
-    const today = new Date();
-    const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
-    const todayStr = fmt(today);
-    const tomorrowStr = fmt(tomorrow);
-
     const [sliceAll, ordersAll, detailAll, batchAll, varietyAll, clientAll] = await Promise.all([
       appFetch(ORDERS, 'labels to print upcoming week only'),
       appFetch(ORDERS, 'order'),
@@ -162,207 +596,38 @@ async function loadData() {
       appFetch(ORDERS, 'client')
     ]);
 
-    // Build lookup maps
     const varMap = {};
     varietyAll.forEach(v => { varMap[v.id] = v; });
 
     const clientPrefs = {};
     clientAll.forEach(c => {
-      if (c.account_name && c.account_name.trim())
-        clientPrefs[c.account_name.trim()] = { bring_invoice: (c['bring_invoice?'] || 'N').trim() };
+      if (c.account_name?.trim())
+        clientPrefs[c.account_name.trim()] = { bring_invoice: (c['bring_invoice?']||'N').trim() };
     });
 
     const orderMap = {};
     ordersAll.forEach(o => { if (o.id) orderMap[o.id] = o; });
-
-    // Enrich detail with client_name
     detailAll.forEach(d => {
       if (!d.client_name && d.order && orderMap[d.order])
         d.client_name = orderMap[d.order].client_name || '';
     });
 
-    // Filter by date
-    const todayOrders  = ordersAll.filter(o => o.fulfillment_date === todayStr);
-    const todayDetails = detailAll.filter(d => d.fulfillment_date === todayStr);
-    const tmrOrders    = ordersAll.filter(o => o.fulfillment_date === tomorrowStr);
-    const tmrDetails   = detailAll.filter(d => d.fulfillment_date === tomorrowStr);
-    const labelsToday  = sliceAll.filter(r => r.fulfillment_date === todayStr);
-    const labelsTmr    = sliceAll.filter(r => r.fulfillment_date === tomorrowStr);
-
-    const harvests  = batchAll.filter(b => (b.optimal_harvest_date||'').trim() === todayStr && b.status_name === 'Being Harvested');
-    const plantings = batchAll.filter(b => (b.optimal_planting_date||'').trim() === todayStr);
-
-    const activeStops = todayOrders.filter(o => !o.status.toLowerCase().includes('cancel'));
-
-    // ── KPI BAR ──
-    document.getElementById('kpiBar').innerHTML = [
-      { val: activeStops.length, label: 'Stops Today' },
-      { val: todayDetails.filter(d => !d.status.toLowerCase().includes('cancel')).length, label: 'Items to Pack' },
-      { val: harvests.length, label: 'Harvests Today' },
-      { val: tmrOrders.length, label: "Tomorrow's Stops" }
-    ].map(k => `<div class="kpi"><div class="kpi-val">${k.val}</div><div class="kpi-label">${k.label}</div></div>`).join('');
-
-    document.getElementById('subtitle').textContent =
-      `${todayStr}  •  Refreshed at ${new Date().toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'})}`;
-
-    // ── PACK-OUT ──
-    document.getElementById('badge-stops').textContent = activeStops.length;
-    const sortedOrders = [...todayOrders].sort((a,b) => {
-      const an = parseInt(a.stop_number) || 9999;
-      const bn = parseInt(b.stop_number) || 9999;
-      return an - bn;
-    });
-    let packHtml = '';
-    if (sortedOrders.length === 0) {
-      packHtml = '<div class="empty">No orders today.</div>';
-    } else {
-      packHtml = '<table><thead><tr><th>Product</th><th>Qty</th><th>Oz</th><th>Unit $</th><th>Total $</th><th>Status</th></tr></thead><tbody>';
-      sortedOrders.forEach(ord => {
-        const prefs = clientPrefs[ord.client_name] || {};
-        const inv = prefs.bring_invoice === 'Y'
-          ? '<span class="inv-yes">✓ Invoice</span>'
-          : '<span class="inv-no">No invoice</span>';
-        const stopLabel = ord.stop_number ? `<span class="stop-num">#${ord.stop_number}</span>` : '';
-        packHtml += `<tr class="stop-header"><td colspan="6">${stopLabel}<strong>${ord.client_name}</strong> &nbsp; ${inv} &nbsp; <span style="color:#888;font-size:0.78rem;font-weight:400">${ord.status}</span></td></tr>`;
-        const items = todayDetails.filter(d => d.order === ord.id);
-        if (items.length === 0) {
-          packHtml += `<tr><td colspan="6" class="empty" style="padding-left:16px">No items</td></tr>`;
-        } else {
-          items.forEach(it => {
-            packHtml += `<tr>
-              <td style="padding-left:16px">${it.product_name||'—'}</td>
-              <td>${it.quantity_boxes||0}</td>
-              <td>${it.total_ounces||0}</td>
-              <td>${it.unit_price ? '$'+parseFloat(it.unit_price).toFixed(2) : '—'}</td>
-              <td>${it.total_price ? '$'+parseFloat(it.total_price).toFixed(2) : '—'}</td>
-              <td>${statusPill(it.status)}</td>
-            </tr>`;
-          });
-        }
-      });
-      packHtml += '</tbody></table>';
-    }
-    document.getElementById('packout-body').innerHTML = packHtml;
-
-    // ── HARVESTS ──
-    document.getElementById('badge-harvest').textContent = harvests.length;
-    if (harvests.length === 0) {
-      document.getElementById('harvest-body').innerHTML = '<div class="empty">No harvests scheduled today.</div>';
-    } else {
-      const m12 = harvests.filter(b => /^M[12]/i.test(b.rack || ''));
-      const tbl = m12.length > 0 ? m12 : harvests;
-      let hHtml = '<table><thead><tr><th>Rack</th><th>Trays</th><th>Batch</th><th>Harvest Time</th></tr></thead><tbody>';
-      tbl.forEach(b => {
-        hHtml += `<tr>
-          <td>${simplifyRack(b.rack)}</td>
-          <td>${b.number_of_trays||'?'}</td>
-          <td>${b.name||'—'}</td>
-          <td>${b.optimal_harvest_time ? b.optimal_harvest_time.replace(':00','') : '—'}</td>
-        </tr>`;
-      });
-      hHtml += '</tbody></table>';
-      document.getElementById('harvest-body').innerHTML = hHtml;
-    }
-
-    // ── LABELS ──
-    const totalLabels = labelsToday.length + labelsTmr.length;
-    document.getElementById('badge-labels').textContent = totalLabels;
-    if (totalLabels === 0) {
-      document.getElementById('labels-body').innerHTML = '<div class="empty">No unprinted labels for today or tomorrow.</div>';
-    } else {
-      let lHtml = '';
-      const byDate = [[todayStr, labelsToday], [tomorrowStr, labelsTmr]];
-      byDate.forEach(([dateStr, items]) => {
-        if (items.length === 0) return;
-        const sorted = [...items].sort((a,b) => (a.product_name||'').localeCompare(b.product_name||''));
-        lHtml += `<div class="date-group">${dateStr}</div>`;
-        lHtml += '<table><thead><tr><th>Product</th><th>Qty</th><th>Oz</th></tr></thead><tbody>';
-        sorted.forEach(l => {
-          lHtml += `<tr><td>${l.product_name||'—'}</td><td>${l.quantity_boxes||0}</td><td>${l.total_ounces||0}</td></tr>`;
-        });
-        lHtml += '</tbody></table>';
-      });
-      document.getElementById('labels-body').innerHTML = lHtml;
-    }
-
-    // ── OZ BY VARIETY ──
-    const ozMap = {};
-    [...todayDetails, ...tmrDetails].forEach(d => {
-      const v = varMap[d.variety];
-      if (!v || v['mix?'] === 'Y') return;
-      const name = v.name || d.variety;
-      const oz = parseFloat(d.total_ounces) || 0;
-      if (oz === 0) return;
-      ozMap[name] = (ozMap[name] || 0) + oz;
-    });
-    const ozEntries = Object.entries(ozMap).sort((a,b) => b[1]-a[1]);
-    if (ozEntries.length === 0) {
-      document.getElementById('oz-body').innerHTML = '<div class="empty">No oz data.</div>';
-    } else {
-      let ozHtml = '<table><thead><tr><th>Variety</th><th>Total Oz Needed</th></tr></thead><tbody>';
-      ozEntries.forEach(([name, oz]) => {
-        ozHtml += `<tr><td>${name}</td><td class="oz-total">${oz} oz</td></tr>`;
-      });
-      ozHtml += '</tbody></table>';
-      document.getElementById('oz-body').innerHTML = ozHtml;
-    }
-
-    // ── PLANTINGS ──
-    document.getElementById('badge-plant').textContent = plantings.length;
-    const nonLettuceNonMix = plantings.filter(b => {
-      const v = varMap[b.variety];
-      if (!v) return true;
-      if (v['mix?'] === 'Y') return false;
-      if (v.reserve_1 === 'Lettuce') return false;
-      const nm = (v.name||'').toLowerCase();
-      if (nm.includes('lettuce') || nm.includes('hydro salanova') || nm.includes('little gem')) return false;
-      return true;
-    });
-    if (nonLettuceNonMix.length === 0) {
-      document.getElementById('plant-body').innerHTML = '<div class="empty">No plantings today.</div>';
-    } else {
-      let pHtml = '<table><thead><tr><th>Batch</th><th>Variety</th><th>Trays</th></tr></thead><tbody>';
-      nonLettuceNonMix.forEach(b => {
-        const vname = varMap[b.variety] ? varMap[b.variety].name : b.variety;
-        pHtml += `<tr><td>${b.name||'—'}</td><td>${vname}</td><td>${b.number_of_trays||'?'}</td></tr>`;
-      });
-      pHtml += '</tbody></table>';
-      document.getElementById('plant-body').innerHTML = pHtml;
-    }
-
-    // ── TOMORROW ──
-    document.getElementById('badge-tmr').textContent = tmrOrders.length;
-    const sortedTmr = [...tmrOrders].sort((a,b) => (parseInt(a.stop_number)||9999)-(parseInt(b.stop_number)||9999));
-    if (sortedTmr.length === 0) {
-      document.getElementById('tomorrow-body').innerHTML = '<div class="empty">No orders tomorrow.</div>';
-    } else {
-      let tHtml = '<table><thead><tr><th>Product</th><th>Qty</th><th>Oz</th><th>Status</th></tr></thead><tbody>';
-      sortedTmr.forEach(ord => {
-        const stopLabel = ord.stop_number ? `<span class="stop-num">#${ord.stop_number}</span>` : '';
-        tHtml += `<tr class="stop-header"><td colspan="4">${stopLabel}<strong>${ord.client_name}</strong></td></tr>`;
-        const items = tmrDetails.filter(d => d.order === ord.id);
-        items.forEach(it => {
-          tHtml += `<tr>
-            <td style="padding-left:16px">${it.product_name||'—'}</td>
-            <td>${it.quantity_boxes||0}</td>
-            <td>${it.total_ounces||0}</td>
-            <td>${statusPill(it.status)}</td>
-          </tr>`;
-        });
-      });
-      tHtml += '</tbody></table>';
-      document.getElementById('tomorrow-body').innerHTML = tHtml;
-    }
+    __store = {
+      sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap,
+      fetchedAt: new Date().toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'})
+    };
 
     document.getElementById('loading').style.display = 'none';
-    document.getElementById('content').style.display = 'block';
+    document.getElementById('content').style.display  = 'block';
+
+    renderForDate(__viewDate);
 
   } catch(err) {
     const errEl = document.getElementById('error-msg');
     errEl.textContent = '⚠️ ' + err.message;
     errEl.style.display = 'block';
     document.getElementById('loading').style.display = 'none';
-    document.getElementById('content').style.display = 'block';
+    document.getElementById('content').style.display  = 'block';
   } finally {
     document.getElementById('refreshBtn').disabled = false;
     document.getElementById('refreshBtn').textContent = '↻ Refresh';
