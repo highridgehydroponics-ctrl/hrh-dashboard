@@ -180,9 +180,17 @@
     <div id="packout-body"></div>
   </div>
 
+  <div class="section" id="sec-stops">
+    <div class="section-title">
+      📋 Stops Today
+      <span class="sec-badge" id="badge-stops-today"></span>
+    </div>
+    <div id="stops-today-body"></div>
+  </div>
+
   <div class="section" id="sec-harvest">
     <div class="section-title">
-      ✂️ Harvest Today
+      ✂️ Harvested Today
       <span class="sec-badge" id="badge-harvest"></span>
     </div>
     <div id="harvest-body"></div>
@@ -226,7 +234,7 @@ const ORDERS = { appId: 'bea55701-8006-4581-a791-19a75092943f', apiKey: 'V2-f4zl
 const GR     = { appId: 'fe7f55b7-a021-4f49-a9cb-c5528e8de84e', apiKey: 'V2-yQryr-d6cw2-Th5B2-TE8Na-aNKjx-YAnBI-K7AzT-iVWEh' };
 const GC     = { appId: '0ddb09d1-5e1c-434e-9e6e-ce46a54cd628', apiKey: 'V2-tSZCd-mCmE9-JdcyR-TIS5Q-grSxm-EKYUM-EkcIV-0CHoS' };
 
-const ALL_SECTIONS = ['sec-packout','sec-harvest','sec-labels','sec-oz','sec-plant','sec-tomorrow'];
+const ALL_SECTIONS = ['sec-packout','sec-stops','sec-harvest','sec-labels','sec-oz','sec-plant','sec-tomorrow'];
 let activeFilter = null;
 let __store      = null;
 let __viewDate   = new Date();
@@ -341,7 +349,6 @@ function renderForDate(viewDate) {
   const tmrDetails   = detailAll.filter(d => d.fulfillment_date === tmrStr);
   const labelsToday  = sliceAll.filter(r => r.fulfillment_date === todayStr);
   const labelsTmr    = sliceAll.filter(r => r.fulfillment_date === tmrStr);
-  const harvests     = batchAll.filter(b => (b.optimal_harvest_date||'').trim() === todayStr && b.status_name === 'Being Harvested');
   const plantings    = batchAll.filter(b => (b.optimal_planting_date||'').trim() === todayStr);
 
   // Pack-out: ONLY upcoming items (not packed out, not cancelled)
@@ -354,11 +361,26 @@ function renderForDate(viewDate) {
 
   // ── KPI BAR ──
   const totalLabels = labelsToday.length + labelsTmr.length;
+  // Completed harvests: optimal_harvest_date = today and trays harvested > 0
+  const completedHarvests = batchAll.filter(b =>
+    (b.optimal_harvest_date||'').trim() === todayStr &&
+    (parseInt(b.number_trays_harvested)||0) > 0
+  );
+  // Plant KPI = sum of trays (non-mix, non-lettuce)
+  const nonLettuceNonMixForKpi = plantings.filter(b => {
+    const v = varMap[b.variety];
+    if (!v) return true;
+    if (v['mix?'] === 'Y') return false;
+    if (v.reserve_1 === 'Lettuce') return false;
+    const nm = (v.name||'').toLowerCase();
+    return !nm.includes('lettuce') && !nm.includes('hydro salanova') && !nm.includes('little gem');
+  });
+  const plantTraySum = nonLettuceNonMixForKpi.reduce((sum, b) => sum + (parseInt(b.number_of_trays)||0), 0);
   const kpiDefs = [
-    { val: activeOrders.length,  label: 'Stops Today',          target: 'sec-packout', cls: 'kpi-green'  },
+    { val: activeOrders.length,  label: 'Stops Today',          target: 'sec-stops',   cls: 'kpi-green'  },
     { val: upcomingItems.length, label: 'Items to Pack',         target: 'sec-packout', cls: 'kpi-orange' },
-    { val: harvests.length,      label: 'To Harvest',            target: 'sec-harvest', cls: 'kpi-blue'   },
-    { val: plantings.length,     label: 'To Plant',              target: 'sec-plant',   cls: 'kpi-blue'   },
+    { val: completedHarvests.length, label: 'Harvested Today',  target: 'sec-harvest', cls: 'kpi-blue'   },
+    { val: plantTraySum,         label: 'Trays to Plant',        target: 'sec-plant',   cls: 'kpi-blue'   },
     { val: totalLabels,          label: 'Labels to Print',       target: 'sec-labels',  cls: 'kpi-orange' },
     { val: tmrOrders.length,     label: 'Deliveries Tomorrow',   target: 'sec-tomorrow',cls: 'kpi-purple' },
   ];
@@ -439,21 +461,79 @@ function renderForDate(viewDate) {
   }
   document.getElementById('packout-body').innerHTML = packHtml;
 
-  // ── HARVESTS ──
-  document.getElementById('badge-harvest').textContent = harvests.length;
-  if (!harvests.length) {
-    document.getElementById('harvest-body').innerHTML = '<div class="empty">No harvests scheduled for this date.</div>';
+  // ── STOPS TODAY (full layout like Tomorrow) ──
+  document.getElementById('badge-stops-today').textContent = activeOrders.length;
+  if (!activeOrders.length) {
+    document.getElementById('stops-today-body').innerHTML = '<div class="empty">No stops for this date.</div>';
   } else {
-    const tbl = harvests.filter(b => /^M[12]/i.test(b.rack||'')).length > 0
-      ? harvests.filter(b => /^M[12]/i.test(b.rack||'')) : harvests;
+    let st = `<div class="tbl-wrap"><table>
+      <thead><tr>
+        <th>Stop #</th><th>Customer</th><th>Product</th>
+        <th>Qty</th><th>Oz</th><th>Unit $</th><th>Total $</th><th>Status</th><th>Invoice</th>
+      </tr></thead><tbody>`;
+    sortedOrders.forEach(ord => {
+      const prefs  = clientPrefs[ord.client_name]||{};
+      const invTxt = prefs.bring_invoice === 'Y'
+        ? '<span class="inv-yes">Yes</span>' : '<span class="inv-no">No</span>';
+      const stopCell = ord.stop_number ? `<span class="stop-num">${ord.stop_number}</span>` : '—';
+      const items = todayDetails.filter(d => d.order === ord.id);
+      let stopTotal = 0;
+      if (!items.length) {
+        st += `<tr><td>${stopCell}</td><td>${ord.client_name}</td>
+          <td colspan="5" class="empty">No items</td>
+          <td>${statusPill(ord.status)}</td><td>${invTxt}</td></tr>`;
+      } else {
+        items.forEach((it, i) => {
+          const lt = parseFloat(it.total_price)||0; stopTotal += lt;
+          st += `<tr>
+            <td>${i===0?stopCell:''}</td>
+            <td class="customer-col" style="font-weight:${i===0?'600':'400'};color:${i===0?'#333':'#bbb'}">${i===0?ord.client_name:''}</td>
+            <td>${it.product_name||'—'}</td>
+            <td><span class="qty-badge">${it.quantity_boxes||0}</span></td>
+            <td>${it.total_ounces||0}</td>
+            <td>${it.unit_price?'$'+parseFloat(it.unit_price).toFixed(2):'—'}</td>
+            <td>${lt?'$'+lt.toFixed(2):'—'}</td>
+            <td>${i===0?statusPill(ord.status):''}</td>
+            <td>${i===0?invTxt:''}</td>
+          </tr>`;
+        });
+        if (stopTotal>0) {
+          st += `<tr class="subtotal-row">
+            <td colspan="6" style="text-align:right">Stop subtotal</td>
+            <td class="subtotal-val">$${stopTotal.toFixed(2)}</td>
+            <td colspan="2"></td>
+          </tr>`;
+        }
+      }
+    });
+    document.getElementById('stops-today-body').innerHTML = st + '</tbody></table></div>';
+  }
+
+  // ── HARVESTED TODAY (completed batches) ──
+  document.getElementById('badge-harvest').textContent = completedHarvests.length;
+  if (!completedHarvests.length) {
+    document.getElementById('harvest-body').innerHTML = '<div class="empty">No completed harvests for this date.</div>';
+  } else {
+    const tbl = completedHarvests.filter(b => /^M[12]/i.test(b.rack||'')).length > 0
+      ? completedHarvests.filter(b => /^M[12]/i.test(b.rack||'')) : completedHarvests;
     let h = `<div class="tbl-wrap"><table>
-      <thead><tr><th>Rack</th><th>Trays Harvested</th><th>Batch</th><th>Time</th></tr></thead><tbody>`;
+      <thead><tr><th>Rack</th><th>Batch</th><th>Trays Harvested</th><th>Yield / Tray</th></tr></thead><tbody>`;
     tbl.forEach(b => {
+      const traysHarv = parseInt(b.number_trays_harvested)||0;
+      // Use actual_yield_per_tray field if available, else compute from total oz fields
+      let yieldPerTray = '—';
+      if (b.actual_yield_per_tray && parseFloat(b.actual_yield_per_tray)) {
+        yieldPerTray = parseFloat(b.actual_yield_per_tray).toFixed(1) + ' oz';
+      } else if (b.total_oz_harvested && parseFloat(b.total_oz_harvested) && traysHarv > 0) {
+        yieldPerTray = (parseFloat(b.total_oz_harvested) / traysHarv).toFixed(1) + ' oz';
+      } else if (b.avg_yield_oz && parseFloat(b.avg_yield_oz) && traysHarv > 0) {
+        yieldPerTray = (parseFloat(b.avg_yield_oz) / traysHarv).toFixed(1) + ' oz';
+      }
       h += `<tr>
         <td>${simplifyRack(b.rack)}</td>
-        <td>${yieldCell(b)}</td>
         <td>${b.name||'—'}</td>
-        <td>${b.optimal_harvest_time ? b.optimal_harvest_time.replace(':00','') : '—'}</td>
+        <td>${traysHarv} / ${parseInt(b.number_of_trays)||0}</td>
+        <td>${yieldPerTray}</td>
       </tr>`;
     });
     document.getElementById('harvest-body').innerHTML = h + '</tbody></table></div>';
@@ -507,24 +587,21 @@ function renderForDate(viewDate) {
   }
 
   // ── PLANTINGS ──
-  document.getElementById('badge-plant').textContent = plantings.length;
-  const nonLettuceNonMix = plantings.filter(b => {
-    const v = varMap[b.variety];
-    if (!v) return true;
-    if (v['mix?'] === 'Y') return false;
-    if (v.reserve_1 === 'Lettuce') return false;
-    const nm = (v.name||'').toLowerCase();
-    return !nm.includes('lettuce') && !nm.includes('hydro salanova') && !nm.includes('little gem');
-  });
-  if (!nonLettuceNonMix.length) {
+  document.getElementById('badge-plant').textContent = plantTraySum;
+  if (!nonLettuceNonMixForKpi.length) {
     document.getElementById('plant-body').innerHTML = '<div class="empty">No plantings for this date.</div>';
   } else {
+    // Sort alphabetically by variety name
+    const sortedPlantings = [...nonLettuceNonMixForKpi].sort((a, b) => {
+      const nameA = (varMap[a.variety]?.name || a.variety || '').toLowerCase();
+      const nameB = (varMap[b.variety]?.name || b.variety || '').toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
     let p = `<div class="tbl-wrap"><table>
-      <thead><tr><th>Batch</th><th>Variety</th><th>Trays</th></tr></thead><tbody>`;
-    nonLettuceNonMix.forEach(b => {
+      <thead><tr><th>Batch</th><th>Trays</th></tr></thead><tbody>`;
+    sortedPlantings.forEach(b => {
       p += `<tr>
         <td>${b.name||'—'}</td>
-        <td>${varMap[b.variety]?.name||b.variety}</td>
         <td>${b.number_of_trays||'?'}</td>
       </tr>`;
     });
