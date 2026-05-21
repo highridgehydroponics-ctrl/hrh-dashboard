@@ -300,16 +300,23 @@
       🏷️ Labels to Print
       <span class="sec-badge" id="badge-labels"></span>
     </div>
+    <div style="margin-bottom:10px">
+      <button id="saveLabelBtn" onclick="saveLabelsPrinted()"
+        style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:7px 18px;font-size:0.84rem;font-weight:700;cursor:pointer;display:none">
+        ✅ Save Printed Labels
+      </button>
+      <span id="saveLabelStatus" style="font-size:0.8rem;color:#16a34a;margin-left:10px"></span>
+    </div>
     <div id="labels-body"></div>
   </div>
 
   <div class="section" id="sec-oz">
     <div class="section-title">
-      ⚖️ Allocation Details
+      Allocation Details
       <span class="sec-badge" id="badge-oz"></span>
     </div>
     <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
-      <label style="font-size:0.8rem;color:#888;font-weight:600">Date:</label>
+      <label style="font-size:0.8rem;color:#888;font-weight:600">Select Order Fulfillment Date</label>
       <input type="date" id="allocDateInput" style="font-size:0.82rem;padding:4px 8px;border:1px solid #dde0e8;border-radius:6px;color:#333" onchange="setAllocDate(this.value)">
     </div>
     <div id="oz-body"></div>
@@ -513,6 +520,55 @@ function toggleStopDetail(sdId) {
   row.style.display = open ? 'none' : 'table-row';
   if (chev) chev.textContent = open ? '▶' : '▼';
 }
+async function saveLabelsPrinted() {
+  const btn    = document.getElementById('saveLabelBtn');
+  const status = document.getElementById('saveLabelStatus');
+  const checked = [...document.querySelectorAll('.lbl-chk:checked')];
+  if (!checked.length) return;
+  const allIds = checked.flatMap(chk => (chk.dataset.ids||'').split(',').filter(Boolean));
+  if (!allIds.length) { status.textContent = 'No record IDs found.'; return; }
+  btn.disabled = true;
+  btn.textContent = '⏳ Saving…';
+  status.textContent = '';
+  try {
+    const url = `https://api.appsheet.com/api/v2/apps/${ORDERS.appId}/tables/order_detail/Action`;
+    const body = {
+      Action: 'Edit',
+      Properties: {},
+      Rows: allIds.map(id => ({ id, 'labels_printed?': 'Printed' }))
+    };
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'ApplicationAccessKey': ORDERS.apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    status.style.color = '#16a34a';
+    status.textContent = `✅ Marked ${allIds.length} record(s) as Printed`;
+    checked.forEach(chk => {
+      const row = chk.closest('div[style*="border-bottom"]');
+      if (row) row.style.opacity = '0.45';
+    });
+    btn.style.display = 'none';
+    btn.disabled = false;
+    btn.textContent = '✅ Save Printed Labels';
+  } catch(e) {
+    status.style.color = '#dc2626';
+    status.textContent = '❌ Save failed: ' + e.message;
+    btn.disabled = false;
+    btn.textContent = '✅ Save Printed Labels';
+  }
+}
+
+function togglePlantDetail(id) {
+  const row  = document.getElementById(id + '_det');
+  const chev = document.getElementById(id + '_chev');
+  if (!row) return;
+  const isOpen = row.style.display !== 'none';
+  row.style.display = isOpen ? 'none' : 'table-row';
+  if (chev) chev.textContent = isOpen ? '▶' : '▼';
+}
+
 function toggleOzRow(id) {
   const el = document.getElementById(id);
   const chev = document.getElementById('chev_' + id);
@@ -852,6 +908,33 @@ function renderForDate(viewDate) {
       oz
     });
   });
+  // ── Cross-reference mix ingredients into individual variety rows ──
+  Object.entries(ozByVariety).forEach(([mixName, mixData]) => {
+    if (!mixData.varietyId) return;
+    const mv = varMap[mixData.varietyId];
+    if (!mv || mv['mix?'] !== 'Y') return;
+    const components = mixMap[mixData.varietyId];
+    if (!components || !components.length) return;
+    mixData.items.forEach(mixItem => {
+      components.forEach(comp => {
+        const ingOz = Math.round(mixItem.oz * comp.pct / 100 * 10) / 10;
+        if (!ingOz) return;
+        const ingVar = varMap[comp.componentId];
+        if (ingVar && ingVar.reserve_1 === 'Lettuce') return;
+        const ingName = comp.componentName;
+        if (!ozByVariety[ingName]) {
+          ozByVariety[ingName] = { total: 0, items: [], varietyId: comp.componentId };
+        }
+        ozByVariety[ingName].total = Math.round((ozByVariety[ingName].total + ingOz) * 10) / 10;
+        ozByVariety[ingName].items.push({
+          customer: mixItem.customer,
+          product:  mixItem.product,
+          qty:      mixItem.qty,
+          oz:       ingOz
+        });
+      });
+    });
+  });
   const ozEntries = Object.entries(ozByVariety).sort((a,b) => a[0].localeCompare(b[0])); // A-Z
 
   const totalHarvestTrays = allHarvestToday.reduce((sum, b) => sum + (parseInt(b.number_of_trays)||0), 0);
@@ -1175,26 +1258,31 @@ function renderForDate(viewDate) {
       const byProduct = {};
       items.forEach(l => {
         const key = l.product_name || '—';
-        if (!byProduct[key]) byProduct[key] = { totalQty: 0, customers: [] };
+        if (!byProduct[key]) byProduct[key] = { totalQty: 0, customers: [], ids: [] };
         byProduct[key].totalQty += parseInt(l.quantity_boxes)||0;
         byProduct[key].customers.push({ customer: l.client_name||'—', qty: parseInt(l.quantity_boxes)||0 });
+        if (l.id) byProduct[key].ids.push(String(l.id));
       });
       const sortedProducts = Object.keys(byProduct).sort();
       lHtml += `<div class="date-group">${ds}</div>`;
       sortedProducts.forEach((pname, idx) => {
         const data = byProduct[pname];
         const lid = `${ds.replace(/\//g,'')}_${idx}`;
+        const idsAttr = (data.ids||[]).join(',');
         lHtml += `<div style="border-bottom:1px solid #f2f4f8">
-          <div style="display:flex;align-items:center;gap:8px;padding:9px 4px;cursor:pointer" onclick="toggleLabelRow('${lid}')">
-            <span id="lchev_${lid}" style="color:#1a56cc;font-size:0.8rem;flex-shrink:0">▶</span>
-            <span style="font-weight:600;font-size:0.84rem">${pname}</span>
-            <span class="qty-badge">${data.totalQty}</span>
+          <div style="display:flex;align-items:center;gap:8px;padding:9px 4px">
+            <input type="checkbox" class="lbl-chk" data-ids="${idsAttr}"
+              style="width:16px;height:16px;cursor:pointer;accent-color:#16a34a;flex-shrink:0"
+              title="Mark as printed">
+            <span id="lchev_${lid}" style="color:#1a56cc;font-size:0.8rem;flex-shrink:0;cursor:pointer" onclick="toggleLabelRow('${lid}')">▶</span>
+            <span style="font-weight:600;font-size:0.84rem;flex:1;cursor:pointer" onclick="toggleLabelRow('${lid}')">${pname}</span>
+            <span class="qty-badge" style="background:#dcfce7;color:#16a34a;font-weight:800">${data.totalQty}</span>
           </div>
           <div id="lrow_${lid}" style="display:none;padding:0 0 8px 28px">
             ${data.customers.map(c =>
               `<div style="display:flex;align-items:center;gap:12px;padding:3px 0;font-size:0.82rem">
                 <span style="color:#555;flex:1">${c.customer}</span>
-                <span class="qty-badge">${c.qty}</span>
+                <span style="background:#f1f5f9;color:#1e293b;padding:2px 8px;border-radius:10px;font-size:0.82rem;font-weight:600;white-space:nowrap">${c.qty}</span>
               </div>`
             ).join('')}
           </div>
@@ -1202,6 +1290,14 @@ function renderForDate(viewDate) {
       });
     });
     document.getElementById('labels-body').innerHTML = lHtml;
+    // Show save button when any checkbox is ticked
+    document.querySelectorAll('.lbl-chk').forEach(chk => {
+      chk.addEventListener('change', () => {
+        const anyChecked = document.querySelectorAll('.lbl-chk:checked').length > 0;
+        document.getElementById('saveLabelBtn').style.display = anyChecked ? 'inline-block' : 'none';
+        document.getElementById('saveLabelStatus').textContent = '';
+      });
+    });
   }
 
   // ── ALLOCATION DETAILS (single day, includes mixes, A-Z, grouped expanded view) ──
@@ -1299,13 +1395,96 @@ function renderForDate(viewDate) {
       batches.forEach(b => {
         const v = varMap[b.variety];
         const seedDensity = v ? (v.sd || '—') : '—';
-        rows += `<tr>
-          <td>${b.name||'—'}</td>
+        const bId = 'pt_' + b.id;
+
+        // ── Allocation calc ──
+        const harvestDate  = (b.optimal_harvest_date || '').trim();
+        const numTrays     = parseInt(b.number_of_trays) || 0;
+        const yieldPerTray = v ? (parseFloat(v.avg_yield_per_tray) || 0) : 0;
+        const expectedYield = Math.round(numTrays * yieldPerTray * 10) / 10;
+
+        // Individual: direct variety matches on harvest date
+        const indivDets = detailAll.filter(d =>
+          d.variety === b.variety &&
+          (d.fulfillment_date || '').trim() === harvestDate &&
+          !(d.product_name || '').toLowerCase().includes('live')
+        );
+        const indivOz = Math.round(indivDets.reduce((s,d) => s + (parseFloat(d.total_ounces)||0), 0) * 10) / 10;
+
+        // Mixed: mixes that contain this variety, scaled by %
+        const mixContrib = Object.entries(mixMap)
+          .filter(([mId, comps]) => comps.some(c => c.componentId === b.variety))
+          .map(([mId, comps]) => ({ mId, pct: comps.find(c => c.componentId === b.variety)?.pct || 0 }));
+        let mixOz = 0;
+        const mixDetsAll = [];
+        mixContrib.forEach(({ mId, pct }) => {
+          detailAll.filter(d =>
+            d.variety === mId &&
+            (d.fulfillment_date || '').trim() === harvestDate &&
+            !(d.product_name || '').toLowerCase().includes('live')
+          ).forEach(d => {
+            const contrib = Math.round((parseFloat(d.total_ounces)||0) * pct / 100 * 10) / 10;
+            mixOz += contrib;
+            mixDetsAll.push({ client: d.client_name||'—', product: d.product_name||'—',
+              oz: contrib, qty: parseInt(d.quantity_boxes)||0, date: d.fulfillment_date||'—' });
+          });
+        });
+        mixOz = Math.round(mixOz * 10) / 10;
+        const surplus = Math.round((expectedYield - indivOz - mixOz) * 10) / 10;
+
+        // Build combined product rows
+        const allRows = [
+          ...indivDets.map(d => ({ client: d.client_name||'—', product: d.product_name||'—',
+            oz: parseFloat(d.total_ounces)||0, qty: parseInt(d.quantity_boxes)||0,
+            date: d.fulfillment_date||'—', isMix: false })),
+          ...mixDetsAll.map(r => ({ ...r, isMix: true }))
+        ];
+        const detTbody = allRows.length
+          ? allRows.map(r => `<tr>
+              <td>${r.client}</td>
+              <td>${r.product}${r.isMix ? ' <span style="font-size:0.68rem;color:#7c3aed;background:#f3e8ff;border-radius:4px;padding:0 4px">mix</span>' : ''}</td>
+              <td style="text-align:right">${r.oz.toFixed(1)}</td>
+              <td style="text-align:right">${r.qty}</td>
+              <td>${r.date}</td>
+            </tr>`).join('')
+          : '<tr><td colspan="5" style="color:#aaa;text-align:center;padding:6px">No orders on harvest date</td></tr>';
+
+        const detPanel = `<tr id="${bId}_det" style="display:none">
+          <td colspan="5" style="padding:0;background:#f8fafc;border-bottom:2px solid #e2e8f0">
+            <div style="padding:10px 16px 12px">
+              <div style="font-size:0.88rem;font-weight:700;color:#16a34a;margin-bottom:10px">
+                Expected Yield = ${expectedYield > 0 ? expectedYield + ' oz' : '—'}
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+                <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px">
+                  <div style="font-size:0.7rem;color:#64748b;margin-bottom:2px">Individual Products (oz.)</div>
+                  <div style="font-size:1.05rem;font-weight:700;color:#1e293b">${indivOz.toFixed(2)}</div>
+                </div>
+                <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px">
+                  <div style="font-size:0.7rem;color:#64748b;margin-bottom:2px">Mixed Products (oz.)</div>
+                  <div style="font-size:1.05rem;font-weight:700;color:#1e293b">${mixOz.toFixed(2)}</div>
+                </div>
+                <div style="background:${surplus >= 0 ? '#f0fdf4' : '#fff1f2'};border:1px solid ${surplus >= 0 ? '#bbf7d0' : '#fecdd3'};border-radius:8px;padding:8px 12px">
+                  <div style="font-size:0.7rem;color:#64748b;margin-bottom:2px">Expected Surplus (oz.)</div>
+                  <div style="font-size:1.05rem;font-weight:700;color:${surplus >= 0 ? '#16a34a' : '#dc2626'}">${surplus.toFixed(2)}</div>
+                </div>
+              </div>
+              <div style="font-size:0.75rem;font-weight:700;color:#475569;margin-bottom:5px">Products Supplied (${allRows.length})</div>
+              <div class="tbl-wrap"><table style="font-size:0.8rem">
+                <thead><tr><th>Client</th><th>Order Item</th><th style="text-align:right">Total oz.</th><th style="text-align:right">Qty</th><th>Fulfillment Date</th></tr></thead>
+                <tbody>${detTbody}</tbody>
+              </table></div>
+            </div>
+          </td>
+        </tr>`;
+
+        rows += `<tr style="cursor:pointer" onclick="togglePlantDetail('${bId}')">
+          <td><span id="${bId}_chev" style="color:#1a56cc;font-size:0.75rem;margin-right:4px">▶</span>${b.name||'—'}</td>
           <td>${b.number_of_trays||'?'}</td>
           <td>${b.optimal_unstack_date||'—'}</td>
           <td>${seedDensity}</td>
           <td>${simplifyRack(b._rack_assignment)}</td>
-        </tr>`;
+        </tr>${detPanel}`;
       });
       return `<div class="tbl-wrap"><table>
         <thead><tr><th>Batch</th><th>Trays</th><th>Optimal Unstack Date</th><th>Seed Density (g)</th><th>Rack</th></tr></thead>
