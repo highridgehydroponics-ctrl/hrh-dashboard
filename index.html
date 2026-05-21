@@ -236,9 +236,13 @@
 <div id="error-msg"></div>
 
 <div id="content">
+  <!-- Big date banner -->
+  <div style="text-align:center;margin-bottom:18px;line-height:1.1">
+    <div id="bigDate" style="font-size:3.6rem;font-weight:800;color:#111;letter-spacing:-0.02em"></div>
+  </div>
+
   <div class="header-row">
     <h1>🌱 HRH Morning Rundown</h1>
-    <span class="date-badge" id="dateBadge"></span>
     <div class="header-btns">
       <button id="showAllBtn" onclick="showAll()">← Show All</button>
       <span id="warnBadge" class="warn-badge" style="display:none">⚠️ Live fetch failed — showing cached data</span>
@@ -727,7 +731,8 @@ function renderForDate(viewDate) {
   const tmrStr   = fmt(addDays(viewDate, 1));
 
   // Update date displays
-  document.getElementById('dateBadge').textContent   = fmtBadge(viewDate);
+  const bigDateEl = document.getElementById('bigDate');
+  if (bigDateEl) bigDateEl.textContent = viewDate.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
   document.getElementById('dateDisplay').textContent  = fmtLong(viewDate);
   document.getElementById('todayBtn').style.display   = isToday(viewDate) ? 'none' : 'inline-block';
 
