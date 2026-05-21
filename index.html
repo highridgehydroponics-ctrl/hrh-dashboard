@@ -377,17 +377,24 @@ function isToday(d) {
 function shiftDate(n) { __viewDate = addDays(__viewDate, n); renderForDate(__viewDate); }
 function goToday()    { __viewDate = new Date(); renderForDate(__viewDate); }
 
-// ── DERIVE ORDER STATUS FROM DETAIL ITEMS (bypasses AppSheet API cache lag) ──
-// Uses order_detail statuses which update in real-time, rather than the order
-// table's status field which can lag 30–120s behind the Google Sheet.
-function deriveOrderStatus(orderId, details) {
+// ── DERIVE ORDER STATUS (bypasses AppSheet order-table cache lag) ──
+// Priority:
+//   1. delivery_time_actual is set → Completed (delivery happened, most reliable signal)
+//   2. All detail items Cancelled  → Cancelled
+//   3. All detail items Packed Out → Packed Out
+//   4. Any detail item Upcoming    → Upcoming
+//   5. Fallback: ord.status from order table (may be stale)
+function deriveOrderStatus(orderId, details, ord) {
+  // If delivery timestamp is recorded, the order is definitively Completed
+  if (ord && ord.delivery_time_actual && String(ord.delivery_time_actual).trim()) {
+    return 'Completed';
+  }
   const items = details.filter(d => d.order === orderId);
-  if (!items.length) return null;
+  if (!items.length) return (ord && ord.status) || null;
   const statuses = items.map(d => (d.status||'').toLowerCase());
-  if (statuses.every(s => s.includes('cancel')))           return 'Cancelled';
-  if (statuses.every(s => s.includes('packed')))           return 'Packed Out';
-  if (statuses.some(s => s.includes('upcoming')))          return 'Upcoming';
-  // Fallback: return the raw status of the first item
+  if (statuses.every(s => s.includes('cancel')))  return 'Cancelled';
+  if (statuses.every(s => s.includes('packed')))  return 'Packed Out';
+  if (statuses.some(s => s.includes('upcoming'))) return 'Upcoming';
   return items[0].status || '—';
 }
 
@@ -434,7 +441,8 @@ function simplifyRack(s) {
 function statusPill(s) {
   if (!s) return '';
   const l = s.toLowerCase();
-  if (l.includes('packed'))  return `<span class="pill pill-packed">Packed</span>`;
+  if (l.includes('complet')) return `<span class="pill pill-packed" style="background:#dcfce7;color:#16a34a">Completed</span>`;
+  if (l.includes('packed'))  return `<span class="pill pill-packed">Packed Out</span>`;
   if (l.includes('cancel'))  return `<span class="pill pill-cancelled">Cancelled</span>`;
   return `<span class="pill pill-upcoming">Upcoming</span>`;
 }
@@ -499,13 +507,13 @@ function renderForDate(viewDate) {
     const s = (d.status||'').toLowerCase();
     return s.includes('upcoming') && !s.includes('cancel');
   });
-  // Use derived status (from detail items) to avoid AppSheet order-table cache lag
+  // Use derived status to avoid AppSheet order-table cache lag
   const activeOrders    = todayOrders.filter(o => {
-    const s = (deriveOrderStatus(o.id, todayDetails) || o.status || '').toLowerCase();
+    const s = (deriveOrderStatus(o.id, todayDetails, o) || o.status || '').toLowerCase();
     return !s.includes('cancel');
   });
   const cancelledOrders = todayOrders.filter(o => {
-    const s = (deriveOrderStatus(o.id, todayDetails) || o.status || '').toLowerCase();
+    const s = (deriveOrderStatus(o.id, todayDetails, o) || o.status || '').toLowerCase();
     return s.includes('cancel');
   });
 
@@ -672,7 +680,7 @@ function renderForDate(viewDate) {
         .sort((a,b) => (a.product_name||'').localeCompare(b.product_name||''));
       const stopTotal = items.reduce((s,it) => s + (parseFloat(it.total_price)||0), 0);
       const groupId = `tod_${oi}`;
-      const derivedStatus = deriveOrderStatus(ord.id, todayDetails);
+      const derivedStatus = deriveOrderStatus(ord.id, todayDetails, ord);
       // Collapsible header row — click to collapse/expand products
       st += `<tr style="cursor:pointer;background:#f0f4fb;font-weight:600" onclick="toggleStopRows('${groupId}')">
         <td><span id="stopchev_${groupId}" style="color:#1a56cc;font-size:0.75rem;margin-right:5px">▼</span>${stopCell}</td>
@@ -971,7 +979,7 @@ function renderForDate(viewDate) {
         .sort((a,b) => (a.product_name||'').localeCompare(b.product_name||''));
       const stopTotal = items.reduce((s,it) => s + (parseFloat(it.total_price)||0), 0);
       const groupId = `tmr_${oi}`;
-      const derivedTmrStatus = deriveOrderStatus(ord.id, tmrDetails);
+      const derivedTmrStatus = deriveOrderStatus(ord.id, tmrDetails, ord);
       // Collapsible header row
       t += `<tr style="cursor:pointer;background:#f0f4fb;font-weight:600" onclick="toggleStopRows('${groupId}')">
         <td><span id="stopchev_${groupId}" style="color:#1a56cc;font-size:0.75rem;margin-right:5px">▼</span>${stopCell}</td>
