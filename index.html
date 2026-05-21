@@ -589,7 +589,7 @@ function renderForDate(viewDate) {
   const kpiDefs = [
     { val: activeOrders.length,    label: 'Deliveries Today',                                  target: 'sec-stops',   cls: 'kpi-green'  },
     { val: upcomingItems.length,   label: 'Remaining Items to Pack Out for Today\'s Deliveries', target: 'sec-packout', cls: 'kpi-orange' },
-    { val: totalLabels,            label: 'Labels to Print',                                    target: 'sec-labels',  cls: 'kpi-orange' },
+    { val: totalLabels,            label: 'Labels to Print for TMRO Orders',                    target: 'sec-labels',  cls: 'kpi-orange' },
     { val: allHarvestToday.length, label: 'Batches to Harvest Today for TMRO Orders',           target: 'sec-harvest', cls: 'kpi-blue'   },
     { val: plantTraySum,           label: 'Trays to Plant',                                     target: 'sec-plant',   cls: 'kpi-blue'   },
     { val: ozEntries.length,       label: 'Allocation Details',                                 target: 'sec-oz',      cls: 'kpi-purple' },
@@ -762,7 +762,7 @@ function renderForDate(viewDate) {
     const containerOrder = Object.keys(groups).sort();
     containerOrder.forEach(container => {
       // Sort batches alphabetically by rack within each container
-      groups[container].sort((a,b) => simplifyRack(a.rack).localeCompare(simplifyRack(b._rack_assignment)));
+      groups[container].sort((a,b) => simplifyRack(a._rack_assignment).localeCompare(simplifyRack(b._rack_assignment)));
       html += `<span class="container-group">${container}</span>`;
       html += `<div class="tbl-wrap"><table>
         <thead><tr>
@@ -863,7 +863,7 @@ function renderForDate(viewDate) {
         lHtml += `<div style="border-bottom:1px solid #f2f4f8">
           <div style="display:flex;align-items:center;gap:8px;padding:9px 4px;cursor:pointer" onclick="toggleLabelRow('${lid}')">
             <span id="lchev_${lid}" style="color:#1a56cc;font-size:0.8rem;flex-shrink:0">▶</span>
-            <span style="font-weight:600;font-size:0.84rem;flex:1">${pname}</span>
+            <span style="font-weight:600;font-size:0.84rem">${pname}</span>
             <span class="qty-badge">${data.totalQty}</span>
           </div>
           <div id="lrow_${lid}" style="display:none;padding:0 0 8px 28px">
