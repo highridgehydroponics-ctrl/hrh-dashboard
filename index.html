@@ -543,6 +543,7 @@ async function saveLabelsPrinted() {
       body: JSON.stringify(body)
     });
     if (!r.ok) throw new Error('HTTP ' + r.status);
+    localStorage.removeItem('pendingLabelIds');
     status.style.color = '#16a34a';
     status.textContent = `✅ Marked ${allIds.length} record(s) as Printed`;
     checked.forEach(chk => {
@@ -1298,9 +1299,42 @@ function renderForDate(viewDate) {
         const anyChecked = document.querySelectorAll('.lbl-chk:checked').length > 0;
         document.getElementById('saveLabelBtn').style.display = anyChecked ? 'inline-block' : 'none';
         document.getElementById('saveLabelStatus').textContent = '';
+        // Persist pending IDs so they survive a page refresh
+        const pendingIds = [...document.querySelectorAll('.lbl-chk:checked')]
+          .flatMap(c => (c.dataset.ids||'').split(',').filter(Boolean));
+        if (pendingIds.length) {
+          localStorage.setItem('pendingLabelIds', JSON.stringify(pendingIds));
+        } else {
+          localStorage.removeItem('pendingLabelIds');
+        }
       });
     });
   }
+
+  // ── Auto-restore pending label saves from localStorage ──
+  (function() {
+    const raw = localStorage.getItem('pendingLabelIds');
+    if (!raw) return;
+    try {
+      const pendingIds = JSON.parse(raw);
+      if (!pendingIds.length) return;
+      let anyMatched = false;
+      document.querySelectorAll('.lbl-chk').forEach(chk => {
+        const chkIds = (chk.dataset.ids||'').split(',').filter(Boolean);
+        if (chkIds.some(id => pendingIds.includes(id))) {
+          chk.checked = true;
+          anyMatched = true;
+        }
+      });
+      if (anyMatched) {
+        document.getElementById('saveLabelBtn').style.display = 'inline-block';
+        const st = document.getElementById('saveLabelStatus');
+        st.style.color = '#b45309';
+        st.textContent = '⏳ Unsaved changes from last session — saving…';
+        saveLabelsPrinted();
+      }
+    } catch(e) {}
+  })();
 
   // ── ALLOCATION DETAILS (single day, includes mixes, A-Z, grouped expanded view) ──
   // Update the date picker to reflect the current oz date
