@@ -377,6 +377,20 @@ function isToday(d) {
 function shiftDate(n) { __viewDate = addDays(__viewDate, n); renderForDate(__viewDate); }
 function goToday()    { __viewDate = new Date(); renderForDate(__viewDate); }
 
+// ── DERIVE ORDER STATUS FROM DETAIL ITEMS (bypasses AppSheet API cache lag) ──
+// Uses order_detail statuses which update in real-time, rather than the order
+// table's status field which can lag 30–120s behind the Google Sheet.
+function deriveOrderStatus(orderId, details) {
+  const items = details.filter(d => d.order === orderId);
+  if (!items.length) return null;
+  const statuses = items.map(d => (d.status||'').toLowerCase());
+  if (statuses.every(s => s.includes('cancel')))           return 'Cancelled';
+  if (statuses.every(s => s.includes('packed')))           return 'Packed Out';
+  if (statuses.some(s => s.includes('upcoming')))          return 'Upcoming';
+  // Fallback: return the raw status of the first item
+  return items[0].status || '—';
+}
+
 // ── FILTER ────────────────────────────────────────────────────────────────────
 function filterSection(card) {
   const target = card.dataset.target;
@@ -485,8 +499,15 @@ function renderForDate(viewDate) {
     const s = (d.status||'').toLowerCase();
     return s.includes('upcoming') && !s.includes('cancel');
   });
-  const activeOrders    = todayOrders.filter(o => !o.status.toLowerCase().includes('cancel'));
-  const cancelledOrders = todayOrders.filter(o =>  o.status.toLowerCase().includes('cancel'));
+  // Use derived status (from detail items) to avoid AppSheet order-table cache lag
+  const activeOrders    = todayOrders.filter(o => {
+    const s = (deriveOrderStatus(o.id, todayDetails) || o.status || '').toLowerCase();
+    return !s.includes('cancel');
+  });
+  const cancelledOrders = todayOrders.filter(o => {
+    const s = (deriveOrderStatus(o.id, todayDetails) || o.status || '').toLowerCase();
+    return s.includes('cancel');
+  });
 
   // ── KPI BAR ──
   const totalLabels = labelsToday.length + labelsTmr.length;
@@ -651,6 +672,7 @@ function renderForDate(viewDate) {
         .sort((a,b) => (a.product_name||'').localeCompare(b.product_name||''));
       const stopTotal = items.reduce((s,it) => s + (parseFloat(it.total_price)||0), 0);
       const groupId = `tod_${oi}`;
+      const derivedStatus = deriveOrderStatus(ord.id, todayDetails);
       // Collapsible header row — click to collapse/expand products
       st += `<tr style="cursor:pointer;background:#f0f4fb;font-weight:600" onclick="toggleStopRows('${groupId}')">
         <td><span id="stopchev_${groupId}" style="color:#1a56cc;font-size:0.75rem;margin-right:5px">▼</span>${stopCell}</td>
@@ -658,7 +680,7 @@ function renderForDate(viewDate) {
         <td></td><td></td>
         <td></td>
         <td style="text-align:right;color:#333">${stopTotal>0?'$'+stopTotal.toFixed(2):''}</td>
-        <td>${statusPill(ord.status)}</td>
+        <td>${statusPill(derivedStatus || ord.status)}</td>
         <td>${invTxt}</td>
       </tr>`;
       if (!items.length) {
@@ -703,7 +725,8 @@ function renderForDate(viewDate) {
       html += `<span class="container-group">${container}</span>`;
       html += `<div class="tbl-wrap"><table>
         <thead><tr>
-          <th>Rack</th><th>Batch</th><th># Trays Harvested</th><th>Actual Yield (oz total)</th><th></th>
+          <th>Rack</th><th>Batch</th><th># Trays Harvested</th><th>Actual Yield (oz total)</th>
+          <th>Actual Avg oz/Tray</th><th>Expected Avg oz/Tray</th><th></th>
         </tr></thead><tbody>`;
       groups[container].forEach(b => {
         const total    = parseInt(b.number_of_trays)||0;
@@ -711,6 +734,14 @@ function renderForDate(viewDate) {
         const harvVal  = ov.trays !== undefined ? ov.trays : (parseInt(b.number_trays_harvested)||0);
         const yieldVal = ov.yield !== undefined ? ov.yield : (parseFloat(b.actual_yield||'') || '');
         const pct      = total > 0 ? Math.min(100, Math.round(harvVal/total*100)) : 0;
+        // Actual avg yield/tray: only show when both yield and trays are recorded
+        const actualYieldNum = parseFloat(yieldVal) || 0;
+        const actualAvg = (actualYieldNum > 0 && harvVal > 0)
+          ? (actualYieldNum / harvVal).toFixed(1) + ' oz'
+          : '—';
+        // Expected avg yield/tray: from variety table avg_yield_per_tray field
+        const v = varMap[b.variety];
+        const expectedAvg = v && v.avg_yield_per_tray ? v.avg_yield_per_tray + ' oz' : '—';
         html += `<tr>
           <td>${simplifyRack(b.rack)}</td>
           <td>${b.name||'—'}</td>
@@ -730,6 +761,8 @@ function renderForDate(viewDate) {
               <span class="yield-of">oz</span>
             </div>
           </td>
+          <td style="font-weight:600;color:#1d4ed8">${actualAvg}</td>
+          <td style="color:#888">${expectedAvg}</td>
           <td><button class="save-btn" id="sbtn_${b.id}" onclick="saveHarvestRow('${b.id}')">Save</button></td>
         </tr>`;
       });
@@ -938,6 +971,7 @@ function renderForDate(viewDate) {
         .sort((a,b) => (a.product_name||'').localeCompare(b.product_name||''));
       const stopTotal = items.reduce((s,it) => s + (parseFloat(it.total_price)||0), 0);
       const groupId = `tmr_${oi}`;
+      const derivedTmrStatus = deriveOrderStatus(ord.id, tmrDetails);
       // Collapsible header row
       t += `<tr style="cursor:pointer;background:#f0f4fb;font-weight:600" onclick="toggleStopRows('${groupId}')">
         <td><span id="stopchev_${groupId}" style="color:#1a56cc;font-size:0.75rem;margin-right:5px">▼</span>${stopCell}</td>
@@ -945,7 +979,7 @@ function renderForDate(viewDate) {
         <td></td><td></td>
         <td></td>
         <td style="text-align:right;color:#333">${stopTotal>0?'$'+stopTotal.toFixed(2):''}</td>
-        <td>${statusPill(ord.status)}</td>
+        <td>${statusPill(derivedTmrStatus || ord.status)}</td>
         <td>${invTxt}</td>
       </tr>`;
       if (!items.length) {
