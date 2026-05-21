@@ -415,6 +415,21 @@ function fmtBadge(d) {
   return d.toLocaleDateString('en-US', { weekday:'long', month:'short', day:'numeric' });
 }
 function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate()+n); return r; }
+// Convert "HH:MM" (24h) → "H:MMAM/PM"
+function fmtTime12(t) {
+  if (!t || t === '—') return t || '—';
+  const [hStr, mStr] = t.split(':');
+  let h = parseInt(hStr)||0, m = parseInt(mStr)||0;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${String(m).padStart(2,'0')}${ampm}`;
+}
+// Parse "HH:MM" to minutes for sorting
+function timeToMins(t) {
+  if (!t || t === '—') return 9999;
+  const [h, m] = t.split(':').map(Number);
+  return (h||0)*60 + (m||0);
+}
 function isToday(d) {
   const t = new Date();
   return d.getFullYear()===t.getFullYear() && d.getMonth()===t.getMonth() && d.getDate()===t.getDate();
@@ -589,12 +604,14 @@ function renderForDate(viewDate) {
           sorter:      di.sorter,
           clientName:  ord.client_name || di._client_name || '—',
           stopNumber:  ord.stop_number,
-          invoiceSent: ord.invoice_sent || '—',
+          invoiceSent: ord['invoice_sent?'] || '',
           orderStatus: deriveOrderStatus(di.order, todayDetails, ord)
         });
       });
       todayRoutes.push(route);
     });
+    // Sort routes earliest start time first
+    todayRoutes.sort((a,b) => timeToMins(a.schedTime) - timeToMins(b.schedTime));
   }
 
   // ── KPI BAR ──
@@ -758,7 +775,7 @@ function renderForDate(viewDate) {
     todayRoutes.forEach((route, ri) => {
       const statusColor = route.status === 'Completed' ? '#16a34a'
         : route.status === 'In Progress' ? '#ea580c' : '#888';
-      const timeStr = route.schedTime + (route.actlTime ? ` → ${route.actlTime}` : '');
+      const timeStr = fmtTime12(route.schedTime) + (route.actlTime ? ` → ${fmtTime12(route.actlTime)}` : '');
       // Precompute per-stop totals
       const stopTotals = route.stops.map(stop =>
         todayDetails.filter(d => d.order === stop.orderId)
@@ -771,9 +788,9 @@ function renderForDate(viewDate) {
         <div class="route-card-hdr" onclick="toggleRouteCard('${ri}')">
           <span id="rcchev_${ri}" class="route-chev">▶</span>
           <div class="route-card-info">
-            <span class="route-driver">🧑‍✈️ ${route.driver}</span>
-            <span class="route-vehicle">🚚 ${route.vehicle}</span>
-            <span class="route-time">🕐 ${timeStr}</span>
+            <span class="route-driver">${route.driver}</span>
+            <span class="route-vehicle">${route.vehicle}</span>
+            <span class="route-time">${timeStr}</span>
             <span class="route-status-badge" style="color:${statusColor}">${route.status}</span>
           </div>
           <div class="route-card-meta">
@@ -796,19 +813,32 @@ function renderForDate(viewDate) {
           .sort((a,b) => (a.product_name||'').localeCompare(b.product_name||''));
         const stopTotal = stopTotals[si];
         const invRaw = (stop.invoiceSent||'').toLowerCase().trim();
-        const invHtml = (invRaw === 'yes' || invRaw === 'y')
-          ? '<span style="color:#16a34a;font-weight:600">✓ Yes</span>'
-          : (invRaw === 'no' || invRaw === 'n' || invRaw === '—' || !invRaw)
-            ? '<span style="color:#ccc">No</span>'
-            : `<span style="font-size:0.8rem;color:#888">${stop.invoiceSent}</span>`;
+        const invHtml = (invRaw === 'sent' || invRaw === 'yes')
+          ? '<span style="color:#16a34a;font-weight:700;font-size:0.9rem">Sent</span>'
+          : (invRaw === 'n/a')
+            ? '<span style="color:#94a3b8;font-weight:600;font-size:0.88rem">N/A</span>'
+            : (invRaw === 'not sent' || invRaw === 'no' || invRaw === '')
+              ? '<span style="color:#dc2626;font-weight:700;font-size:0.9rem">Not Sent</span>'
+              : `<span style="color:#888;font-size:0.88rem">${stop.invoiceSent}</span>`;
         const stopNumHtml = stop.stopNumber ? `<span class="stop-num">${stop.stopNumber}</span>` : '—';
+        // Order status: Packed Out = dark green bold large, Upcoming = red bold large
+        const osl = (stop.orderStatus||'').toLowerCase();
+        const orderStatusHtml = osl.includes('packed')
+          ? `<span style="color:#15803d;font-weight:700;font-size:0.88rem">Packed Out</span>`
+          : osl.includes('complet')
+            ? `<span style="color:#15803d;font-weight:700;font-size:0.88rem">Completed</span>`
+            : osl.includes('upcoming')
+              ? `<span style="color:#dc2626;font-weight:700;font-size:0.88rem">Upcoming</span>`
+              : osl.includes('cancel')
+                ? `<span style="color:#64748b;font-weight:600;font-size:0.88rem">Cancelled</span>`
+                : `<span style="font-size:0.88rem;color:#555">${stop.orderStatus||'—'}</span>`;
 
         routesHtml += `
               <tr class="stop-hdr-row" onclick="toggleStopDetail('${sdId}')">
                 <td><span id="sdchev_${sdId}" style="color:#1a56cc;font-size:0.75rem">▶</span></td>
                 <td>${stopNumHtml}</td>
                 <td style="font-weight:600;color:#222">${stop.clientName}</td>
-                <td>${statusPill(stop.orderStatus)}</td>
+                <td>${orderStatusHtml}</td>
                 <td>${invHtml}</td>
                 <td style="text-align:right;color:#333">${stopTotal>0?'$'+stopTotal.toFixed(2):'—'}</td>
               </tr>
