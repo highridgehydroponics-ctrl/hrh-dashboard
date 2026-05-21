@@ -232,8 +232,12 @@
 
   <div class="section" id="sec-oz">
     <div class="section-title">
-      ⚖️ Oz Needed by Variety
-      <span class="sec-sub">(selected day + next day)</span>
+      ⚖️ Allocation Details
+      <span class="sec-badge" id="badge-oz"></span>
+    </div>
+    <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
+      <label style="font-size:0.8rem;color:#888;font-weight:600">Date:</label>
+      <input type="date" id="allocDateInput" style="font-size:0.82rem;padding:4px 8px;border:1px solid #dde0e8;border-radius:6px;color:#333" onchange="setAllocDate(this.value)">
     </div>
     <div id="oz-body"></div>
   </div>
@@ -265,6 +269,7 @@ let activeFilter       = null;
 let __store            = null;
 let __viewDate         = new Date();
 const __harvestOverrides = {}; // keyed by batch id: { trays, yield }
+let __allocDate = null;        // MM/DD/YYYY override for Allocation Details, null = use viewDate
 
 function getContainer(rackStr) {
   if (!rackStr) return 'Other';
@@ -294,6 +299,30 @@ function toggleOzRow(id) {
   const open = el.style.display !== 'none';
   el.style.display = open ? 'none' : 'table-row';
   if (chev) chev.textContent = open ? '▶' : '▼';
+}
+function toggleStopRows(groupId) {
+  const rows = document.querySelectorAll('.stoprows_' + groupId);
+  if (!rows.length) return;
+  const isVisible = rows[0].style.display !== 'none';
+  rows.forEach(r => r.style.display = isVisible ? 'none' : 'table-row');
+  const chev = document.getElementById('stopchev_' + groupId);
+  if (chev) chev.textContent = isVisible ? '▶' : '▼';
+}
+function toggleLabelRow(id) {
+  const el = document.getElementById('lrow_' + id);
+  const chev = document.getElementById('lchev_' + id);
+  if (!el) return;
+  const open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : 'block';
+  if (chev) chev.textContent = open ? '▶' : '▼';
+}
+function setAllocDate(val) {
+  if (!val) { __allocDate = null; }
+  else {
+    const [y, m, d] = val.split('-');
+    __allocDate = `${m}/${d}/${y}`;
+  }
+  if (__store) renderForDate(__viewDate);
 }
 
 async function saveHarvestRow(batchId) {
@@ -405,10 +434,11 @@ function statusDot(s) {
 function itemStatusText(s) {
   if (!s) return '—';
   const l = s.toLowerCase();
-  let color = '#16a34a';
-  if (l.includes('packed')) color = '#64748b';
-  if (l.includes('cancel')) color = '#dc2626';
-  return `<span style="font-size:0.79rem;color:${color};font-weight:500">${s}</span>`;
+  let color = '#888'; // default
+  if (l.includes('packed'))   color = '#16a34a'; // green = packed out
+  if (l.includes('upcoming')) color = '#dc2626'; // red = upcoming
+  if (l.includes('cancel'))   color = '#64748b'; // grey = cancelled
+  return `<span style="font-size:0.79rem;color:${color};font-weight:700">${s}</span>`;
 }
 function yieldCell(b) {
   const total = parseInt(b.number_of_trays)||0;
@@ -473,9 +503,8 @@ function renderForDate(viewDate) {
   const allHarvestToday = batchAll.filter(b =>
     (b.optimal_harvest_date||'').trim() === todayStr && isMicrogreenBatch(b)
   );
-  // Pending = 'Being Harvested' status but trays not yet recorded (rack is assigned at this status)
+  // Pending = trays not yet recorded
   const pendingHarvests   = allHarvestToday.filter(b =>
-    (b.status_name||'').toLowerCase().includes('being harvest') &&
     (parseInt(b.number_trays_harvested)||0) === 0
   );
   const completedHarvests = allHarvestToday.filter(b => (parseInt(b.number_trays_harvested)||0) > 0);
@@ -489,24 +518,30 @@ function renderForDate(viewDate) {
     return !nm.includes('lettuce') && !nm.includes('hydro salanova') && !nm.includes('little gem');
   });
   const plantTraySum = nonLettuceNonMixForKpi.reduce((sum, b) => sum + (parseInt(b.number_of_trays)||0), 0);
-  // Build oz-by-variety map with per-order detail for expandable rows
+  // Build oz-by-variety map — single day, includes mixes (not lettuce), sorted A-Z
+  const ozDate = __allocDate || todayStr;
+  const ozDayDetails = detailAll.filter(d => d.fulfillment_date === ozDate);
   const ozByVariety = {};
-  [...todayDetails, ...tmrDetails].forEach(d => {
+  ozDayDetails.forEach(d => {
     const v = varMap[d.variety];
-    if (!v || v['mix?'] === 'Y') return;
+    if (v) {
+      if (v.reserve_1 === 'Lettuce') return;
+      const nm = (v.name||'').toLowerCase();
+      if (nm.includes('lettuce') || nm.includes('hydro salanova') || nm.includes('little gem')) return;
+    }
     const oz = parseFloat(d.total_ounces)||0;
     if (!oz) return;
-    const vname = v.name || d.variety;
+    const vname = v ? (v.name || d.variety) : (d.variety || '—');
     if (!ozByVariety[vname]) ozByVariety[vname] = { total: 0, items: [] };
     ozByVariety[vname].total += oz;
     ozByVariety[vname].items.push({
       customer: d.client_name || '—',
       product:  d.product_name || '—',
-      oz,
-      date: d.fulfillment_date
+      qty: parseInt(d.quantity_boxes)||0,
+      oz
     });
   });
-  const ozEntries = Object.entries(ozByVariety).sort((a,b) => b[1].total - a[1].total);
+  const ozEntries = Object.entries(ozByVariety).sort((a,b) => a[0].localeCompare(b[0])); // A-Z
 
   const kpiDefs = [
     { val: activeOrders.length,    label: 'Stops Today',         target: 'sec-stops',   cls: 'kpi-green'  },
@@ -594,50 +629,51 @@ function renderForDate(viewDate) {
   }
   document.getElementById('packout-body').innerHTML = packHtml;
 
-  // ── STOPS TODAY (full layout like Tomorrow) ──
+  // ── STOPS TODAY (collapsible header rows, alphabetical products) ──
   document.getElementById('badge-stops-today').textContent = activeOrders.length;
   if (!activeOrders.length) {
     document.getElementById('stops-today-body').innerHTML = '<div class="empty">No stops for this date.</div>';
   } else {
     let st = `<div class="tbl-wrap"><table>
       <thead><tr>
-        <th>Stop #</th><th>Customer</th><th>Product</th><th>Item Status</th>
-        <th>Qty</th><th>Oz</th><th>Unit $</th><th>Total $</th><th>Order Status</th><th>Invoice</th>
+        <th>Stop #</th><th>Customer</th><th>Qty</th><th>Oz</th><th>Total $</th>
+        <th>Status</th><th>Invoice</th>
       </tr></thead><tbody>`;
-    sortedOrders.forEach(ord => {
-      const prefs  = clientPrefs[ord.client_name]||{};
-      const invTxt = prefs.bring_invoice === 'Y'
+    sortedOrders.forEach((ord, oi) => {
+      const prefs   = clientPrefs[ord.client_name]||{};
+      const invTxt  = prefs.bring_invoice === 'Y'
         ? '<span class="inv-yes">Yes</span>' : '<span class="inv-no">No</span>';
       const stopCell = ord.stop_number ? `<span class="stop-num">${ord.stop_number}</span>` : '—';
-      const items = todayDetails.filter(d => d.order === ord.id);
-      let stopTotal = 0;
+      const items = todayDetails.filter(d => d.order === ord.id)
+        .sort((a,b) => (a.product_name||'').localeCompare(b.product_name||''));
+      const stopTotal = items.reduce((s,it) => s + (parseFloat(it.total_price)||0), 0);
+      const groupId = `tod_${oi}`;
+      // Collapsible header row — click to collapse/expand products
+      st += `<tr style="cursor:pointer;background:#f0f4fb;font-weight:600" onclick="toggleStopRows('${groupId}')">
+        <td><span id="stopchev_${groupId}" style="color:#1a56cc;font-size:0.75rem;margin-right:5px">▼</span>${stopCell}</td>
+        <td style="color:#222">${ord.client_name}</td>
+        <td></td><td></td>
+        <td style="text-align:right;color:#333">${stopTotal>0?'$'+stopTotal.toFixed(2):''}</td>
+        <td>${statusPill(ord.status)}</td>
+        <td>${invTxt}</td>
+      </tr>`;
       if (!items.length) {
-        st += `<tr><td>${stopCell}</td><td>${ord.client_name}</td>
-          <td colspan="6" class="empty">No items</td>
-          <td>${statusPill(ord.status)}</td><td>${invTxt}</td></tr>`;
+        st += `<tr class="stoprows_${groupId}">
+          <td></td><td colspan="5" class="empty" style="padding-left:16px">No items</td><td></td>
+        </tr>`;
       } else {
-        items.forEach((it, i) => {
-          const lt = parseFloat(it.total_price)||0; stopTotal += lt;
-          st += `<tr>
-            <td>${i===0?stopCell:''}</td>
-            <td class="customer-col" style="font-weight:${i===0?'600':'400'};color:${i===0?'#333':'#bbb'}">${i===0?ord.client_name:''}</td>
-            <td>${it.product_name||'—'}</td>
-            <td>${itemStatusText(it.status)}</td>
+        items.forEach(it => {
+          const lt = parseFloat(it.total_price)||0;
+          st += `<tr class="stoprows_${groupId}">
+            <td></td>
+            <td style="padding-left:16px">${it.product_name||'—'}</td>
             <td><span class="qty-badge">${it.quantity_boxes||0}</span></td>
             <td>${it.total_ounces||0}</td>
-            <td>${it.unit_price?'$'+parseFloat(it.unit_price).toFixed(2):'—'}</td>
             <td>${lt?'$'+lt.toFixed(2):'—'}</td>
-            <td>${i===0?statusPill(ord.status):''}</td>
-            <td>${i===0?invTxt:''}</td>
+            <td>${itemStatusText(it.status)}</td>
+            <td></td>
           </tr>`;
         });
-        if (stopTotal>0) {
-          st += `<tr class="subtotal-row">
-            <td colspan="7" style="text-align:right">Stop subtotal</td>
-            <td class="subtotal-val">$${stopTotal.toFixed(2)}</td>
-            <td colspan="2"></td>
-          </tr>`;
-        }
       }
     });
     document.getElementById('stops-today-body').innerHTML = st + '</tbody></table></div>';
@@ -711,7 +747,7 @@ function renderForDate(viewDate) {
     document.getElementById('harvest-body').innerHTML = h;
   }
 
-  // ── LABELS ──
+  // ── LABELS (aggregated by product, expandable) ──
   const totalLbls = labelsToday.length + labelsTmr.length;
   document.getElementById('badge-labels').textContent = totalLbls;
   if (!totalLbls) {
@@ -720,29 +756,52 @@ function renderForDate(viewDate) {
     let lHtml = '';
     [[todayStr, labelsToday],[tmrStr, labelsTmr]].forEach(([ds, items]) => {
       if (!items.length) return;
-      const sorted = [...items].sort((a,b) => (a.product_name||'').localeCompare(b.product_name||''));
-      lHtml += `<div class="date-group">${ds}</div>
-        <div class="tbl-wrap"><table>
-          <thead><tr><th>Product</th><th>Customer</th><th>Qty</th><th>Oz</th></tr></thead><tbody>`;
-      sorted.forEach(l => {
-        lHtml += `<tr>
-          <td>${l.product_name||'—'}</td>
-          <td class="customer-col">${l.client_name||'—'}</td>
-          <td>${l.quantity_boxes||0}</td>
-          <td>${l.total_ounces||0}</td>
-        </tr>`;
+      // Aggregate by product_name
+      const byProduct = {};
+      items.forEach(l => {
+        const key = l.product_name || '—';
+        if (!byProduct[key]) byProduct[key] = { totalQty: 0, customers: [] };
+        byProduct[key].totalQty += parseInt(l.quantity_boxes)||0;
+        byProduct[key].customers.push({ customer: l.client_name||'—', qty: parseInt(l.quantity_boxes)||0 });
       });
-      lHtml += '</tbody></table></div>';
+      const sortedProducts = Object.keys(byProduct).sort();
+      lHtml += `<div class="date-group">${ds}</div>`;
+      sortedProducts.forEach((pname, idx) => {
+        const data = byProduct[pname];
+        const lid = `${ds.replace(/\//g,'')}_${idx}`;
+        lHtml += `<div style="border-bottom:1px solid #f2f4f8">
+          <div style="display:flex;align-items:center;gap:8px;padding:9px 4px;cursor:pointer" onclick="toggleLabelRow('${lid}')">
+            <span id="lchev_${lid}" style="color:#1a56cc;font-size:0.8rem;flex-shrink:0">▶</span>
+            <span style="font-weight:600;font-size:0.84rem;flex:1">${pname}</span>
+            <span class="qty-badge">${data.totalQty}</span>
+          </div>
+          <div id="lrow_${lid}" style="display:none;padding:0 0 8px 28px">
+            ${data.customers.map(c =>
+              `<div style="display:flex;align-items:center;gap:12px;padding:3px 0;font-size:0.82rem">
+                <span style="color:#555;flex:1">${c.customer}</span>
+                <span class="qty-badge">${c.qty}</span>
+              </div>`
+            ).join('')}
+          </div>
+        </div>`;
+      });
     });
     document.getElementById('labels-body').innerHTML = lHtml;
   }
 
-  // ── OZ BY VARIETY (expandable) ──
+  // ── ALLOCATION DETAILS (single day, includes mixes, A-Z, grouped expanded view) ──
+  // Update the date picker to reflect the current oz date
+  const allocInput = document.getElementById('allocDateInput');
+  if (allocInput) {
+    const [om,od,oy] = ozDate.split('/');
+    allocInput.value = `${oy}-${om}-${od}`;
+  }
+  document.getElementById('badge-oz').textContent = ozEntries.length;
   if (!ozEntries.length) {
-    document.getElementById('oz-body').innerHTML = '<div class="empty">No oz data.</div>';
+    document.getElementById('oz-body').innerHTML = '<div class="empty">No allocation data for this date.</div>';
   } else {
     let oz = `<div class="tbl-wrap"><table>
-      <thead><tr><th style="width:30px"></th><th>Variety</th><th>Total Oz Needed</th></tr></thead><tbody>`;
+      <thead><tr><th style="width:30px"></th><th>Variety</th><th>Total Oz</th></tr></thead><tbody>`;
     ozEntries.forEach(([name, data], idx) => {
       const rowId = 'ozrow_' + idx;
       oz += `<tr style="cursor:pointer" onclick="toggleOzRow('${rowId}')">
@@ -751,22 +810,31 @@ function renderForDate(viewDate) {
         <td class="oz-total">${data.total} oz</td>
       </tr>
       <tr id="${rowId}" style="display:none">
-        <td colspan="3" style="padding:0 0 6px 24px;background:#f8f9fc">
-          <table style="width:100%;font-size:0.8rem;margin-top:4px">
+        <td colspan="3" style="padding:0 0 8px 24px;background:#f8f9fc">
+          <table style="width:100%;font-size:0.8rem;margin-top:6px">
             <thead><tr>
-              <th style="color:#aaa;font-weight:600;padding:4px 8px">Customer</th>
               <th style="color:#aaa;font-weight:600;padding:4px 8px">Product</th>
-              <th style="color:#aaa;font-weight:600;padding:4px 8px">Date</th>
+              <th style="color:#aaa;font-weight:600;padding:4px 8px">Customer</th>
+              <th style="color:#aaa;font-weight:600;padding:4px 8px">Qty</th>
               <th style="color:#aaa;font-weight:600;padding:4px 8px">Oz</th>
             </tr></thead>
             <tbody>`;
+      // Group by product_name, customers sorted A-Z within each product
+      const byProd = {};
       data.items.forEach(it => {
-        oz += `<tr>
-          <td style="padding:3px 8px;color:#444">${it.customer}</td>
-          <td style="padding:3px 8px;color:#666">${it.product}</td>
-          <td style="padding:3px 8px;color:#999">${it.date}</td>
-          <td style="padding:3px 8px;font-weight:600;color:#ea580c">${it.oz} oz</td>
-        </tr>`;
+        if (!byProd[it.product]) byProd[it.product] = [];
+        byProd[it.product].push(it);
+      });
+      Object.entries(byProd).forEach(([prod, prodItems]) => {
+        const sortedCust = [...prodItems].sort((a,b) => a.customer.localeCompare(b.customer));
+        sortedCust.forEach((it, ci) => {
+          oz += `<tr>
+            <td style="padding:3px 8px;color:#444;font-weight:${ci===0?'600':'400'}">${ci===0?prod:''}</td>
+            <td style="padding:3px 8px;color:#444">${it.customer}</td>
+            <td style="padding:3px 8px;font-weight:600;color:#ea580c">${it.qty}</td>
+            <td style="padding:3px 8px;font-weight:600;color:#ea580c">${it.oz} oz</td>
+          </tr>`;
+        });
       });
       oz += `</tbody></table></td></tr>`;
     });
@@ -785,24 +853,21 @@ function renderForDate(viewDate) {
       return nameA.localeCompare(nameB);
     });
     let p = `<div class="tbl-wrap"><table>
-      <thead><tr><th>Batch</th><th>Rack</th><th>Trays</th><th>Status</th><th>Seed Density</th></tr></thead><tbody>`;
+      <thead><tr><th>Batch</th><th>Trays</th><th>Optimal Unstack Date</th><th>Seed Density</th></tr></thead><tbody>`;
     sortedPlantings.forEach(b => {
       const v = varMap[b.variety];
       const seedDensity = v ? (v.sd || '—') : '—';
-      const rack = simplifyRack(b.rack);
-      const statusTxt = b.status_name || '—';
       p += `<tr>
         <td>${b.name||'—'}</td>
-        <td>${rack}</td>
         <td>${b.number_of_trays||'?'}</td>
-        <td>${statusPill(statusTxt)}</td>
+        <td>${b.optimal_unstack_date||'—'}</td>
         <td>${seedDensity}</td>
       </tr>`;
     });
     document.getElementById('plant-body').innerHTML = p + '</tbody></table></div>';
   }
 
-  // ── TOMORROW ──
+  // ── TOMORROW (collapsible header rows, alphabetical products) ──
   document.getElementById('badge-tmr').textContent = tmrOrders.length;
   const sortedTmr = [...tmrOrders].sort((a,b) =>
     (parseInt(a.stop_number)||9999) - (parseInt(b.stop_number)||9999)
@@ -812,42 +877,44 @@ function renderForDate(viewDate) {
   } else {
     let t = `<div class="tbl-wrap"><table>
       <thead><tr>
-        <th>Stop #</th><th>Customer</th><th>Product</th>
-        <th>Qty</th><th>Oz</th><th>Unit $</th><th>Total $</th><th>Status</th><th>Invoice</th>
+        <th>Stop #</th><th>Customer</th><th>Qty</th><th>Oz</th><th>Total $</th>
+        <th>Status</th><th>Invoice</th>
       </tr></thead><tbody>`;
-    sortedTmr.forEach(ord => {
+    sortedTmr.forEach((ord, oi) => {
       const prefs  = clientPrefs[ord.client_name]||{};
       const invTxt = prefs.bring_invoice === 'Y'
         ? '<span class="inv-yes">Yes</span>' : '<span class="inv-no">No</span>';
       const stopCell = ord.stop_number ? `<span class="stop-num">${ord.stop_number}</span>` : '—';
-      const items = tmrDetails.filter(d => d.order === ord.id);
-      let stopTotal = 0;
+      const items = tmrDetails.filter(d => d.order === ord.id)
+        .sort((a,b) => (a.product_name||'').localeCompare(b.product_name||''));
+      const stopTotal = items.reduce((s,it) => s + (parseFloat(it.total_price)||0), 0);
+      const groupId = `tmr_${oi}`;
+      // Collapsible header row
+      t += `<tr style="cursor:pointer;background:#f0f4fb;font-weight:600" onclick="toggleStopRows('${groupId}')">
+        <td><span id="stopchev_${groupId}" style="color:#1a56cc;font-size:0.75rem;margin-right:5px">▼</span>${stopCell}</td>
+        <td style="color:#222">${ord.client_name}</td>
+        <td></td><td></td>
+        <td style="text-align:right;color:#333">${stopTotal>0?'$'+stopTotal.toFixed(2):''}</td>
+        <td>${statusPill(ord.status)}</td>
+        <td>${invTxt}</td>
+      </tr>`;
       if (!items.length) {
-        t += `<tr><td>${stopCell}</td><td>${ord.client_name}</td>
-          <td colspan="5" class="empty">No items</td>
-          <td>${statusPill(ord.status)}</td><td>${invTxt}</td></tr>`;
+        t += `<tr class="stoprows_${groupId}">
+          <td></td><td colspan="5" class="empty" style="padding-left:16px">No items</td><td></td>
+        </tr>`;
       } else {
-        items.forEach((it, i) => {
-          const lt = parseFloat(it.total_price)||0; stopTotal += lt;
-          t += `<tr>
-            <td>${i===0?stopCell:''}</td>
-            <td class="customer-col" style="font-weight:${i===0?'600':'400'};color:${i===0?'#333':'#bbb'}">${i===0?ord.client_name:''}</td>
-            <td>${it.product_name||'—'}</td>
+        items.forEach(it => {
+          const lt = parseFloat(it.total_price)||0;
+          t += `<tr class="stoprows_${groupId}">
+            <td></td>
+            <td style="padding-left:16px">${it.product_name||'—'}</td>
             <td><span class="qty-badge">${it.quantity_boxes||0}</span></td>
             <td>${it.total_ounces||0}</td>
-            <td>${it.unit_price?'$'+parseFloat(it.unit_price).toFixed(2):'—'}</td>
             <td>${lt?'$'+lt.toFixed(2):'—'}</td>
-            <td>${i===0?statusPill(ord.status):''}</td>
-            <td>${i===0?invTxt:''}</td>
+            <td>${itemStatusText(it.status)}</td>
+            <td></td>
           </tr>`;
         });
-        if (stopTotal>0) {
-          t += `<tr class="subtotal-row">
-            <td colspan="6" style="text-align:right">Stop subtotal</td>
-            <td class="subtotal-val">$${stopTotal.toFixed(2)}</td>
-            <td colspan="2"></td>
-          </tr>`;
-        }
       }
     });
     document.getElementById('tomorrow-body').innerHTML = t + '</tbody></table></div>';
