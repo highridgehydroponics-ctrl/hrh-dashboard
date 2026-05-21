@@ -305,6 +305,10 @@
         style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:7px 18px;font-size:0.84rem;font-weight:700;cursor:pointer;display:none">
         ✅ Save Printed Labels
       </button>
+      <button id="printQueueBtn" onclick="copyPrintPrompt()"
+        style="background:#1a56cc;color:#fff;border:none;border-radius:8px;padding:7px 18px;font-size:0.84rem;font-weight:700;cursor:pointer;display:none;margin-left:8px">
+        🖨️ Queue for Printing in Cowork
+      </button>
       <span id="saveLabelStatus" style="font-size:0.8rem;color:#16a34a;margin-left:10px"></span>
     </div>
     <div id="labels-body"></div>
@@ -520,6 +524,40 @@ function toggleStopDetail(sdId) {
   row.style.display = open ? 'none' : 'table-row';
   if (chev) chev.textContent = open ? '▶' : '▼';
 }
+function copyPrintPrompt() {
+  const checked = [...document.querySelectorAll('.lbl-chk:checked')];
+  if (!checked.length) return;
+
+  // Group by date, collect product + qty
+  const byDate = {};
+  checked.forEach(chk => {
+    const dt  = chk.dataset.date  || 'unknown date';
+    const prd = chk.dataset.product || '?';
+    const qty = chk.dataset.qty   || '?';
+    if (!byDate[dt]) byDate[dt] = [];
+    byDate[dt].push(`${prd} ×${qty}`);
+  });
+
+  const lines = Object.entries(byDate).map(([dt, prods]) =>
+    `${dt}: ${prods.join(', ')}`
+  ).join('\n');
+
+  const prompt = `Print labels for the following:\n${lines}`;
+
+  navigator.clipboard.writeText(prompt).then(() => {
+    const st = document.getElementById('saveLabelStatus');
+    st.style.color = '#1a56cc';
+    st.innerHTML = '📋 Prompt copied! <strong>Switch to Cowork and paste</strong> to start printing.';
+    const btn = document.getElementById('printQueueBtn');
+    const orig = btn.textContent;
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 2500);
+  }).catch(() => {
+    // Fallback: show prompt in a prompt() dialog so user can copy manually
+    window.prompt('Copy this and paste into Cowork:', prompt);
+  });
+}
+
 async function saveLabelsPrinted() {
   const btn    = document.getElementById('saveLabelBtn');
   const status = document.getElementById('saveLabelStatus');
@@ -1275,6 +1313,7 @@ function renderForDate(viewDate) {
         lHtml += `<div style="border-bottom:1px solid #f2f4f8">
           <div style="display:flex;align-items:center;gap:8px;padding:9px 4px">
             <input type="checkbox" class="lbl-chk" data-ids="${idsAttr}"
+              data-product="${pname}" data-qty="${data.totalQty}" data-date="${ds}"
               style="width:16px;height:16px;cursor:pointer;accent-color:#16a34a;flex-shrink:0"
               title="Mark as printed">
             <span id="lchev_${lid}" style="color:#1a56cc;font-size:0.8rem;flex-shrink:0;cursor:pointer" onclick="toggleLabelRow('${lid}')">▶</span>
@@ -1298,6 +1337,7 @@ function renderForDate(viewDate) {
       chk.addEventListener('change', () => {
         const anyChecked = document.querySelectorAll('.lbl-chk:checked').length > 0;
         document.getElementById('saveLabelBtn').style.display = anyChecked ? 'inline-block' : 'none';
+        document.getElementById('printQueueBtn').style.display = anyChecked ? 'inline-block' : 'none';
         document.getElementById('saveLabelStatus').textContent = '';
         // Persist pending IDs so they survive a page refresh
         const pendingIds = [...document.querySelectorAll('.lbl-chk:checked')]
@@ -1328,6 +1368,7 @@ function renderForDate(viewDate) {
       });
       if (anyMatched) {
         document.getElementById('saveLabelBtn').style.display = 'inline-block';
+        document.getElementById('printQueueBtn').style.display = 'inline-block';
         const st = document.getElementById('saveLabelStatus');
         st.style.color = '#b45309';
         st.textContent = '⏳ Unsaved changes from last session — saving…';
