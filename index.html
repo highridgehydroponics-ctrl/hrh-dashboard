@@ -1182,14 +1182,14 @@ function renderForDate(viewDate) {
         lHtml += `<div style="border-bottom:1px solid #f2f4f8">
           <div style="display:flex;align-items:center;gap:8px;padding:9px 4px;cursor:pointer" onclick="toggleLabelRow('${lid}')">
             <span id="lchev_${lid}" style="color:#1a56cc;font-size:0.8rem;flex-shrink:0">▶</span>
-            <span style="font-weight:600;font-size:0.84rem">${pname}</span>
-            <span class="qty-badge">${data.totalQty}</span>
+            <span style="font-weight:600;font-size:0.84rem;flex:1">${pname}</span>
+            <span class="qty-badge" style="background:#dcfce7;color:#16a34a;font-weight:800">${data.totalQty}</span>
           </div>
           <div id="lrow_${lid}" style="display:none;padding:0 0 8px 28px">
             ${data.customers.map(c =>
               `<div style="display:flex;align-items:center;gap:12px;padding:3px 0;font-size:0.82rem">
                 <span style="color:#555;flex:1">${c.customer}</span>
-                <span class="qty-badge">${c.qty}</span>
+                <span style="background:#f1f5f9;color:#1e293b;padding:2px 8px;border-radius:10px;font-size:0.82rem;font-weight:600;white-space:nowrap">${c.qty}</span>
               </div>`
             ).join('')}
           </div>
