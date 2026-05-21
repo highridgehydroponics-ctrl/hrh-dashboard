@@ -372,8 +372,14 @@ async function appFetch(creds, table) {
   const url = `https://api.appsheet.com/api/v2/apps/${creds.appId}/tables/${encodeURIComponent(table)}/Action`;
   const r = await fetch(url, {
     method: 'POST',
-    headers: { 'ApplicationAccessKey': creds.apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ Action: 'Find', Properties: {}, Rows: [] })
+    cache: 'no-store',
+    headers: {
+      'ApplicationAccessKey': creds.apiKey,
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache, no-store',
+      'Pragma': 'no-cache'
+    },
+    body: JSON.stringify({ Action: 'Find', Properties: { Locale: 'en-US', Timezone: 'America/New_York', RunAsUserEmail: '' }, Rows: [] })
   });
   if (!r.ok) throw new Error(`AppSheet error on "${table}": ${r.status}`);
   const t = await r.text();
@@ -555,7 +561,7 @@ function renderForDate(viewDate) {
           <td>${it.product_name||'—'}</td>
           <td><span class="qty-badge">${it.quantity_boxes||0}</span></td>
           <td class="customer-col">${ord.client_name}</td>
-          <td>${statusDot(it.status)}</td>
+          <td>${itemStatusText(it.status)}</td>
         </tr>`;
       });
     });
