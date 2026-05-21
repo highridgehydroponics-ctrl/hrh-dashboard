@@ -130,6 +130,18 @@
   .delivery-sub-label.upcoming-lbl { color: #ea580c; }
   .delivery-sub-label.done-lbl     { color: #16a34a; }
 
+  /* ── DRAFT INVOICES BUTTON ── */
+  .draft-inv-btn { background: #1d4ed8; color: #fff; border: none; border-radius: 7px;
+    padding: 5px 12px; font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 5px; transition: background .15s; }
+  .draft-inv-btn:hover { background: #1e40af; }
+  .draft-inv-btn.copied { background: #16a34a; }
+  .draft-inv-toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+    background: #1e293b; color: #fff; font-size: 0.82rem; font-weight: 500;
+    padding: 9px 18px; border-radius: 8px; pointer-events: none; opacity: 0;
+    transition: opacity .2s; z-index: 9999; white-space: nowrap; }
+  .draft-inv-toast.show { opacity: 1; }
+
   /* ── ROUTE CARDS ── */
   .route-card { background: #f8f9fc; border: 1px solid #e2e5ef; border-radius: 10px;
     margin-bottom: 12px; overflow: hidden; }
@@ -169,13 +181,34 @@
   .inv-yes { color: #16a34a; font-weight: 600; }
   .inv-no  { color: #ccc; }
 
-  /* Harvest save button */
+  /* Harvest save button (kept for compat, no longer rendered) */
   .save-btn { font-size: 0.72rem; padding: 3px 10px; border-radius: 5px;
     background: #1d4ed8; color: #fff; border: none; cursor: pointer; white-space: nowrap; }
   .save-btn:hover { background: #1e40af; }
   .save-btn:disabled { background: #93c5fd; cursor: default; }
   .save-btn.saved    { background: #16a34a; }
   .save-btn.err      { background: #dc2626; }
+
+  /* Pack-out checkmark button */
+  .packout-chk { width: 26px; height: 26px; border-radius: 50%;
+    border: 2px solid #cbd5e1; background: #fff; color: #94a3b8;
+    cursor: pointer; font-size: 0.85rem; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: all .15s; padding: 0; flex-shrink: 0; }
+  .packout-chk:hover:not(.already-packed) { border-color: #1d4ed8; color: #1d4ed8; }
+  .packout-chk.queued { border-color: #1d4ed8; background: #1d4ed8; color: #fff; }
+  .packout-chk.already-packed { border-color: #16a34a; background: #dcfce7; color: #16a34a; cursor: default; }
+
+  /* Global save button */
+  #saveAllBtn { background: #f59e0b; color: #fff; border: none; border-radius: 7px;
+    padding: 7px 14px; font-size: 0.83rem; font-weight: 600; cursor: pointer;
+    display: none; align-items: center; gap: 7px; }
+  #saveAllBtn:hover { background: #d97706; }
+  #saveAllBtn:disabled { background: #9ca3af; cursor: default; }
+  #saveAllBtn.saving  { background: #6b7280; }
+  #saveAllBtn.success { background: #16a34a; }
+  .save-count-badge { background: rgba(0,0,0,.18); border-radius: 10px;
+    padding: 1px 7px; font-size: 0.75rem; font-weight: 700; }
 
   .empty { color: #bbb; font-size: 0.85rem; padding: 12px 0; }
 
@@ -198,6 +231,7 @@
 </head>
 <body>
 
+<div id="draft-inv-toast" class="draft-inv-toast">📋 Copied! Paste into Claude to run Draft Invoices</div>
 <div id="loading">⏳ Loading fresh data from AppSheet…</div>
 <div id="error-msg"></div>
 
@@ -209,6 +243,9 @@
       <button id="showAllBtn" onclick="showAll()">← Show All</button>
       <span id="warnBadge" class="warn-badge" style="display:none">⚠️ Live fetch failed — showing cached data</span>
       <button id="printBtn" onclick="window.print()">🖨 Print</button>
+      <button id="saveAllBtn" onclick="saveAllChanges()">
+        💾 Save Changes <span class="save-count-badge" id="saveBadge">0</span>
+      </button>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
         <button id="refreshBtn" onclick="loadData()">⚡ Refresh</button>
         <span id="lastRefresh" style="font-size:0.68rem;color:#aaa;display:none"></span>
@@ -238,6 +275,9 @@
     <div class="section-title">
       📋 Deliveries Today
       <span class="sec-badge" id="badge-stops-today"></span>
+      <button class="draft-inv-btn" id="draftInvBtn" onclick="copyDraftInvoices()" title="Copies the command to your clipboard — paste into Claude to run">
+        📄 Draft Square Invoices
+      </button>
     </div>
     <div id="stops-today-body"></div>
   </div>
@@ -295,10 +335,12 @@ const DELIV  = { appId: 'f57f33e9-2515-46d3-8394-168d7e834ded', apiKey: 'V2-pFgD
 const GC     = { appId: '0ddb09d1-5e1c-434e-9e6e-ce46a54cd628', apiKey: 'V2-tSZCd-mCmE9-JdcyR-TIS5Q-grSxm-EKYUM-EkcIV-0CHoS' };
 
 const ALL_SECTIONS = ['sec-packout','sec-stops','sec-harvest','sec-labels','sec-oz','sec-plant','sec-tomorrow'];
-let activeFilter       = null;
-let __store            = null;
-let __viewDate         = new Date();
+let activeFilter         = null;
+let __store              = null;
+let __viewDate           = new Date();
 const __harvestOverrides = {}; // keyed by batch id: { trays, yield }
+const __dirtyHarvests    = new Set(); // batch IDs with unsaved changes
+const __pendingPackOuts  = {}; // order_detail id → true (queued for Packed Out)
 let __allocDate = null;        // MM/DD/YYYY override for Allocation Details, null = use viewDate
 
 function getContainer(rackStr) {
@@ -317,9 +359,138 @@ function setHarvestOverride(id, field, value, total, barId) {
       : (__harvestOverrides[id].trays !== undefined ? __harvestOverrides[id].trays : 0);
     if (bar) bar.style.width = Math.min(100, Math.round(trays/total*100)) + '%';
   }
-  // Mark the row's save button as dirty
-  const btn = document.getElementById('sbtn_' + id);
-  if (btn) { btn.textContent = 'Save'; btn.className = 'save-btn'; }
+  __dirtyHarvests.add(id);
+  updateSaveBadge();
+}
+
+// ── PACK-OUT CHECKMARKS & BATCH SAVE ─────────────────────────────────────────
+function packOutChkBtn(detailId, currentStatus) {
+  const packed = (currentStatus||'').toLowerCase().includes('packed');
+  if (packed) {
+    return `<button class="packout-chk already-packed" title="Already Packed Out" onclick="void(0)">✓</button>`;
+  }
+  const queued = !!__pendingPackOuts[detailId];
+  return `<button class="packout-chk${queued?' queued':''}" data-id="${detailId}"
+    onclick="togglePackOut('${detailId}','${(currentStatus||'').replace(/'/g,'')}')"
+    title="${queued?'Queued — click Save to apply':'Mark as Packed Out'}">${queued?'✓':'○'}</button>`;
+}
+
+function togglePackOut(detailId, currentStatus) {
+  if ((currentStatus||'').toLowerCase().includes('packed')) return;
+  if (__pendingPackOuts[detailId]) {
+    delete __pendingPackOuts[detailId];
+  } else {
+    __pendingPackOuts[detailId] = true;
+  }
+  const queued = !!__pendingPackOuts[detailId];
+  document.querySelectorAll(`.packout-chk[data-id="${detailId}"]`).forEach(btn => {
+    btn.classList.toggle('queued', queued);
+    btn.textContent = queued ? '✓' : '○';
+    btn.title = queued ? 'Queued — click Save to apply' : 'Mark as Packed Out';
+  });
+  updateSaveBadge();
+}
+
+function updateSaveBadge() {
+  const total = Object.keys(__pendingPackOuts).length + __dirtyHarvests.size;
+  const saveBtn = document.getElementById('saveAllBtn');
+  const badge   = document.getElementById('saveBadge');
+  if (saveBtn) saveBtn.style.display = total > 0 ? 'flex' : 'none';
+  if (badge)   badge.textContent = total;
+}
+
+async function saveAllChanges() {
+  const saveBtn = document.getElementById('saveAllBtn');
+  const detailIds  = Object.keys(__pendingPackOuts);
+  const harvestIds = [...__dirtyHarvests];
+  if (!detailIds.length && !harvestIds.length) return;
+
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.className = 'saving';
+    saveBtn.innerHTML = '⏳ Saving…'; }
+
+  const errors = [];
+
+  // ── Batch: order_detail → Packed Out ──────────────────────────────────────
+  if (detailIds.length) {
+    try {
+      const rows = detailIds.map(id => ({ id, status: 'Packed Out' }));
+      const r = await fetch(
+        `https://api.appsheet.com/api/v2/apps/${ORDERS.appId}/tables/order_detail/Action`,
+        { method:'POST', cache:'no-store',
+          headers:{ 'ApplicationAccessKey': ORDERS.apiKey, 'Content-Type':'application/json' },
+          body: JSON.stringify({ Action:'Edit', Properties:{}, Rows: rows }) }
+      );
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      detailIds.forEach(id => {
+        delete __pendingPackOuts[id];
+        // Update all matching checkmark buttons to already-packed style
+        document.querySelectorAll(`.packout-chk[data-id="${id}"]`).forEach(btn => {
+          btn.classList.remove('queued');
+          btn.classList.add('already-packed');
+          btn.textContent = '✓';
+          btn.title = 'Already Packed Out';
+          btn.onclick = null;
+        });
+      });
+    } catch(e) { errors.push('Pack-out save failed: ' + e.message); }
+  }
+
+  // ── Batch: harvest rows ───────────────────────────────────────────────────
+  if (harvestIds.length) {
+    try {
+      const rows = harvestIds.map(id => {
+        const ov  = __harvestOverrides[id] || {};
+        const row = { id };
+        if (ov.trays !== undefined) row.number_trays_harvested = String(ov.trays);
+        if (ov.yield !== undefined) row.actual_yield = String(ov.yield);
+        return row;
+      });
+      const r = await fetch(
+        `https://api.appsheet.com/api/v2/apps/${GC.appId}/tables/batch/Action`,
+        { method:'POST', cache:'no-store',
+          headers:{ 'ApplicationAccessKey': GC.apiKey, 'Content-Type':'application/json' },
+          body: JSON.stringify({ Action:'Edit', Properties:{}, Rows: rows }) }
+      );
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      harvestIds.forEach(id => __dirtyHarvests.delete(id));
+    } catch(e) { errors.push('Harvest save failed: ' + e.message); }
+  }
+
+  if (errors.length) {
+    alert('⚠️ Some saves failed:\n' + errors.join('\n'));
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.className = '';
+      saveBtn.innerHTML = '⚠️ Retry <span class="save-count-badge" id="saveBadge">' +
+        (Object.keys(__pendingPackOuts).length + __dirtyHarvests.size) + '</span>';
+    }
+  } else {
+    if (saveBtn) { saveBtn.className = 'success'; saveBtn.innerHTML = '✓ Saved!'; }
+    setTimeout(() => {
+      if (saveBtn) { saveBtn.className = ''; saveBtn.disabled = false; }
+      updateSaveBadge();
+      loadData(); // reload fresh data
+    }, 1500);
+  }
+}
+
+function copyDraftInvoices() {
+  // Build a date-specific command using the current view date
+  const dateStr = fmt(__viewDate); // MM/DD/YYYY
+  const [m, d, y] = dateStr.split('/');
+  const cmd = `draft invoices for ${m}/${d}/${y}`;
+  navigator.clipboard.writeText(cmd).then(() => {
+    const btn   = document.getElementById('draftInvBtn');
+    const toast = document.getElementById('draft-inv-toast');
+    if (btn)   { btn.classList.add('copied'); btn.textContent = '✓ Copied!'; }
+    if (toast) { toast.classList.add('show'); }
+    setTimeout(() => {
+      if (btn)   { btn.classList.remove('copied'); btn.innerHTML = '📄 Draft Square Invoices'; }
+      if (toast) { toast.classList.remove('show'); }
+    }, 2500);
+  }).catch(() => {
+    alert('Command to paste into Claude:\n\ndraft invoices for ' + dateStr);
+  });
 }
 
 function toggleRouteCard(ri) {
@@ -455,7 +626,11 @@ function deriveOrderStatus(orderId, details, ord) {
   const statuses = items.map(d => (d.status||'').toLowerCase());
   if (statuses.every(s => s.includes('cancel')))  return 'Cancelled';
   if (statuses.every(s => s.includes('packed')))  return 'Packed Out';
-  if (statuses.some(s => s.includes('upcoming'))) return 'Upcoming';
+  // Some packed out, some still upcoming → In Progress
+  const hasPacked   = statuses.some(s => s.includes('packed'));
+  const hasUpcoming = statuses.some(s => s.includes('upcoming'));
+  if (hasPacked && hasUpcoming) return 'In Progress';
+  if (hasUpcoming) return 'Upcoming';
   return items[0].status || '—';
 }
 
@@ -722,6 +897,7 @@ function renderForDate(viewDate) {
           <td><span class="qty-badge">${it.quantity_boxes||0}</span></td>
           <td class="customer-col">${ord.client_name}</td>
           <td>${itemStatusText(it.status)}</td>
+          <td style="width:36px;text-align:center">${isCancelled?'':packOutChkBtn(it.id, it.status)}</td>
         </tr>`;
       });
     });
@@ -735,7 +911,7 @@ function renderForDate(viewDate) {
   } else {
     packHtml = `<div class="tbl-wrap"><table>
       <thead><tr>
-        <th>Product</th><th>Total Qty</th><th>Customer</th><th>Status</th>
+        <th>Product</th><th>Total Qty</th><th>Customer</th><th>Status</th><th style="width:36px"></th>
       </tr></thead>
       <tbody>${activeRows}</tbody>
     </table></div>`;
@@ -823,15 +999,17 @@ function renderForDate(viewDate) {
         const stopNumHtml = stop.stopNumber ? `<span class="stop-num">${stop.stopNumber}</span>` : '—';
         // Order status: Packed Out = dark green bold large, Upcoming = red bold large
         const osl = (stop.orderStatus||'').toLowerCase();
-        const orderStatusHtml = osl.includes('packed')
+        const orderStatusHtml = osl.includes('packed out')
           ? `<span style="color:#15803d;font-weight:700;font-size:0.88rem">Packed Out</span>`
           : osl.includes('complet')
             ? `<span style="color:#15803d;font-weight:700;font-size:0.88rem">Completed</span>`
-            : osl.includes('upcoming')
-              ? `<span style="color:#dc2626;font-weight:700;font-size:0.88rem">Upcoming</span>`
-              : osl.includes('cancel')
-                ? `<span style="color:#64748b;font-weight:600;font-size:0.88rem">Cancelled</span>`
-                : `<span style="font-size:0.88rem;color:#555">${stop.orderStatus||'—'}</span>`;
+            : osl.includes('in progress')
+              ? `<span style="color:#ea580c;font-weight:700;font-size:0.88rem">In Progress</span>`
+              : osl.includes('upcoming')
+                ? `<span style="color:#dc2626;font-weight:700;font-size:0.88rem">Upcoming</span>`
+                : osl.includes('cancel')
+                  ? `<span style="color:#64748b;font-weight:600;font-size:0.88rem">Cancelled</span>`
+                  : `<span style="font-size:0.88rem;color:#555">${stop.orderStatus||'—'}</span>`;
 
         routesHtml += `
               <tr class="stop-hdr-row" onclick="toggleStopDetail('${sdId}')">
@@ -855,6 +1033,7 @@ function renderForDate(viewDate) {
                     <th style="color:#aaa;padding:4px 8px">Unit $</th>
                     <th style="color:#aaa;padding:4px 8px">Total $</th>
                     <th style="color:#aaa;padding:4px 8px">Status</th>
+                    <th style="width:36px"></th>
                   </tr></thead><tbody>`;
           items.forEach(it => {
             const lt = parseFloat(it.total_price)||0;
@@ -864,6 +1043,7 @@ function renderForDate(viewDate) {
                     <td style="padding:4px 8px">${it.unit_price?'$'+parseFloat(it.unit_price).toFixed(2):'—'}</td>
                     <td style="padding:4px 8px">${lt?'$'+lt.toFixed(2):'—'}</td>
                     <td style="padding:4px 8px">${itemStatusText(it.status)}</td>
+                    <td style="padding:4px 8px;text-align:center">${packOutChkBtn(it.id, it.status)}</td>
                   </tr>`;
           });
           routesHtml += `</tbody></table>`;
@@ -902,7 +1082,7 @@ function renderForDate(viewDate) {
       html += `<div class="tbl-wrap"><table>
         <thead><tr>
           <th>Rack</th><th>Batch</th><th># Trays Harvested</th><th>Actual Yield (oz total)</th>
-          <th>Actual Avg oz/Tray</th><th>Expected Avg oz/Tray</th><th></th>
+          <th>Actual Avg oz/Tray</th><th>Expected Avg oz/Tray</th>
         </tr></thead><tbody>`;
       groups[container].forEach(b => {
         const total    = parseInt(b.number_of_trays)||0;
@@ -950,7 +1130,6 @@ function renderForDate(viewDate) {
           </td>
           <td>${actualAvg}</td>
           <td style="color:#888">${expectedAvg}</td>
-          <td><button class="save-btn" id="sbtn_${b.id}" onclick="saveHarvestRow('${b.id}')">Save</button></td>
         </tr>`;
       });
       html += '</tbody></table></div>';
