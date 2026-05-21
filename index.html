@@ -169,7 +169,7 @@
   .date-group:first-child { margin-top: 0; border-top: none; }
 
   /* Oz */
-  .oz-total { font-weight: 600; }
+  .oz-total { font-weight: 800; color: #16a34a; font-size: 1rem; }
 
   /* Status pill (harvest/plant sections) */
   .pill { display: inline-block; font-size: 0.7rem; padding: 2px 7px; border-radius: 8px; white-space: nowrap; }
@@ -930,7 +930,9 @@ function renderForDate(viewDate) {
           customer: mixItem.customer,
           product:  mixItem.product,
           qty:      mixItem.qty,
-          oz:       ingOz
+          oz:       ingOz,
+          fromMix:  true,
+          mixName:  mixName
         });
       });
     });
@@ -1327,15 +1329,19 @@ function renderForDate(viewDate) {
         <td colspan="3" style="padding:0 0 8px 24px;background:#f8f9fc">
           <table style="width:100%;font-size:0.8rem;margin-top:6px">
             <thead><tr>
-              <th style="color:#aaa;font-weight:600;padding:4px 8px">Product</th>
-              <th style="color:#aaa;font-weight:600;padding:4px 8px">Qty</th>
-              <th style="color:#aaa;font-weight:600;padding:4px 8px">Oz</th>
-              <th style="color:#aaa;font-weight:600;padding:4px 8px">Customer</th>
+              <th style="color:#aaa;font-weight:600;padding:2px 4px">Product</th>
+              <th style="color:#aaa;font-weight:600;padding:2px 4px">Qty</th>
+              <th style="color:#aaa;font-weight:600;padding:2px 4px">Oz</th>
+              <th style="color:#aaa;font-weight:600;padding:2px 4px">Customer</th>
             </tr></thead>
             <tbody>`;
-      // Group by product_name sorted A-Z, customers sorted A-Z within each product
+      // Separate direct vs mix-sourced items
+      const directItems = data.items.filter(it => !it.fromMix);
+      const mixItemsRaw = data.items.filter(it => it.fromMix);
+
+      // Direct: group by product A-Z, then customer A-Z
       const byProd = {};
-      data.items.forEach(it => {
+      directItems.forEach(it => {
         if (!byProd[it.product]) byProd[it.product] = [];
         byProd[it.product].push(it);
       });
@@ -1343,12 +1349,28 @@ function renderForDate(viewDate) {
         const sortedCust = [...prodItems].sort((a,b) => a.customer.localeCompare(b.customer));
         sortedCust.forEach((it, ci) => {
           oz += `<tr>
-            <td style="padding:3px 8px;color:#444;font-weight:${ci===0?'600':'400'}">${ci===0?prod:''}</td>
-            <td style="padding:3px 8px;font-weight:600;color:#ea580c">${it.qty}</td>
-            <td style="padding:3px 8px;font-weight:600;color:#ea580c">${it.oz} oz</td>
-            <td style="padding:3px 8px;color:#555">${it.customer}</td>
+            <td style="padding:2px 4px;color:#444;font-weight:${ci===0?'600':'400'}">${ci===0?prod:''}</td>
+            <td style="padding:2px 4px;font-weight:600;color:#ea580c">${it.qty}</td>
+            <td style="padding:2px 4px;font-weight:600;color:#ea580c">${it.oz} oz</td>
+            <td style="padding:2px 4px;color:#555">${it.customer}</td>
           </tr>`;
         });
+      });
+
+      // Mix-sourced: one consolidated row per mix variety, oz summed, qty=1
+      const byMix = {};
+      mixItemsRaw.forEach(it => {
+        const mn = it.mixName || it.product;
+        if (!byMix[mn]) byMix[mn] = 0;
+        byMix[mn] = Math.round((byMix[mn] + it.oz) * 10) / 10;
+      });
+      Object.entries(byMix).sort(([a],[b]) => a.localeCompare(b)).forEach(([mn, totalOz]) => {
+        oz += `<tr style="background:#fefce8">
+          <td style="padding:2px 4px;color:#92400e;font-weight:600">${mn} <span style="font-size:0.68rem;background:#fef3c7;color:#92400e;border-radius:3px;padding:0 3px">mix</span></td>
+          <td style="padding:2px 4px;font-weight:600;color:#ea580c">1</td>
+          <td style="padding:2px 4px;font-weight:600;color:#ea580c">${totalOz} oz</td>
+          <td style="padding:2px 4px;color:#aaa;font-size:0.75rem;font-style:italic">combined</td>
+        </tr>`;
       });
       // Mix recipe breakdown
       if (isMix && mixComponents && mixComponents.length) {
