@@ -208,7 +208,7 @@
 
   <div class="section" id="sec-stops">
     <div class="section-title">
-      📋 Stops Today
+      📋 Deliveries Today
       <span class="sec-badge" id="badge-stops-today"></span>
     </div>
     <div id="stops-today-body"></div>
@@ -434,6 +434,8 @@ async function appFetch(creds, table) {
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function simplifyRack(s) {
   if (!s) return '—';
+  // '***' is AppSheet's internal placeholder meaning no rack pinned yet
+  if (s.trim() === '***') return '—';
   return s.split(',').map(p =>
     p.trim().replace(/^[^-]+-/, '').replace(/\(\d+\)$/, '').trim()
   ).filter(Boolean).join(', ') || '—';
@@ -576,7 +578,7 @@ function renderForDate(viewDate) {
   const ozEntries = Object.entries(ozByVariety).sort((a,b) => a[0].localeCompare(b[0])); // A-Z
 
   const kpiDefs = [
-    { val: activeOrders.length,    label: 'Stops Today',         target: 'sec-stops',   cls: 'kpi-green'  },
+    { val: activeOrders.length,    label: 'Deliveries Today',    target: 'sec-stops',   cls: 'kpi-green'  },
     { val: upcomingItems.length,   label: 'Items to Pack',        target: 'sec-packout', cls: 'kpi-orange' },
     { val: allHarvestToday.length, label: 'Harvest Today',        target: 'sec-harvest', cls: 'kpi-blue'   },
     { val: plantTraySum,           label: 'Trays to Plant',       target: 'sec-plant',   cls: 'kpi-blue'   },
@@ -661,27 +663,35 @@ function renderForDate(viewDate) {
   }
   document.getElementById('packout-body').innerHTML = packHtml;
 
-  // ── STOPS TODAY (collapsible header rows, alphabetical products) ──
+  // ── DELIVERIES TODAY (split: upcoming vs completed, collapsible) ──
   document.getElementById('badge-stops-today').textContent = activeOrders.length;
-  if (!activeOrders.length) {
-    document.getElementById('stops-today-body').innerHTML = '<div class="empty">No stops for this date.</div>';
-  } else {
+
+  const upcomingStops   = sortedOrders.filter(ord => {
+    const s = (deriveOrderStatus(ord.id, todayDetails, ord) || '').toLowerCase();
+    return !s.includes('complet');
+  });
+  const completedStops  = sortedOrders.filter(ord => {
+    const s = (deriveOrderStatus(ord.id, todayDetails, ord) || '').toLowerCase();
+    return s.includes('complet');
+  });
+
+  function buildStopsTable(orders, idPrefix) {
+    if (!orders.length) return '<div class="empty" style="padding:6px 0">None</div>';
     let st = `<div class="tbl-wrap"><table>
       <thead><tr>
         <th>Stop #</th><th>Customer</th><th>Item Status</th><th>Qty</th>
         <th>Unit $</th><th>Total $</th><th>Order Status</th><th>Bring Invoice w Delivery?</th>
       </tr></thead><tbody>`;
-    sortedOrders.forEach((ord, oi) => {
-      const prefs   = clientPrefs[ord.client_name]||{};
-      const invTxt  = prefs.bring_invoice === 'Y'
+    orders.forEach((ord, oi) => {
+      const prefs    = clientPrefs[ord.client_name]||{};
+      const invTxt   = prefs.bring_invoice === 'Y'
         ? '<span class="inv-yes">Yes</span>' : '<span class="inv-no">No</span>';
       const stopCell = ord.stop_number ? `<span class="stop-num">${ord.stop_number}</span>` : '—';
-      const items = todayDetails.filter(d => d.order === ord.id)
+      const items    = todayDetails.filter(d => d.order === ord.id)
         .sort((a,b) => (a.product_name||'').localeCompare(b.product_name||''));
       const stopTotal = items.reduce((s,it) => s + (parseFloat(it.total_price)||0), 0);
-      const groupId = `tod_${oi}`;
+      const groupId  = `${idPrefix}_${oi}`;
       const derivedStatus = deriveOrderStatus(ord.id, todayDetails, ord);
-      // Collapsible header row — click to collapse/expand products
       st += `<tr style="cursor:pointer;background:#f0f4fb;font-weight:600" onclick="toggleStopRows('${groupId}')">
         <td><span id="stopchev_${groupId}" style="color:#1a56cc;font-size:0.75rem;margin-right:5px">▼</span>${stopCell}</td>
         <td style="color:#222">${ord.client_name}</td>
@@ -710,7 +720,18 @@ function renderForDate(viewDate) {
         });
       }
     });
-    document.getElementById('stops-today-body').innerHTML = st + '</tbody></table></div>';
+    return st + '</tbody></table></div>';
+  }
+
+  if (!activeOrders.length) {
+    document.getElementById('stops-today-body').innerHTML = '<div class="empty">No deliveries for this date.</div>';
+  } else {
+    const stopsHtml =
+      `<div class="harvest-sub-label">⏳ Upcoming Deliveries (${upcomingStops.length})</div>` +
+      buildStopsTable(upcomingStops, 'upd') +
+      `<div class="harvest-sub-label" style="margin-top:14px">✅ Completed Deliveries (${completedStops.length})</div>` +
+      buildStopsTable(completedStops, 'cpd');
+    document.getElementById('stops-today-body').innerHTML = stopsHtml;
   }
 
   // ── HARVEST TODAY (pending + completed, grouped by M1/M2) ──
@@ -721,7 +742,7 @@ function renderForDate(viewDate) {
     // Group by container (M1, M2, Other)
     const groups = {};
     batches.forEach(b => {
-      const c = getContainer(b.rack);
+      const c = getContainer(b._rack_assignment);
       if (!groups[c]) groups[c] = [];
       groups[c].push(b);
     });
@@ -729,7 +750,7 @@ function renderForDate(viewDate) {
     const containerOrder = Object.keys(groups).sort();
     containerOrder.forEach(container => {
       // Sort batches alphabetically by rack within each container
-      groups[container].sort((a,b) => simplifyRack(a.rack).localeCompare(simplifyRack(b.rack)));
+      groups[container].sort((a,b) => simplifyRack(a.rack).localeCompare(simplifyRack(b._rack_assignment)));
       html += `<span class="container-group">${container}</span>`;
       html += `<div class="tbl-wrap"><table>
         <thead><tr>
@@ -751,7 +772,7 @@ function renderForDate(viewDate) {
         const v = varMap[b.variety];
         const expectedAvg = v && v.avg_yield_per_tray ? v.avg_yield_per_tray + ' oz' : '—';
         html += `<tr>
-          <td>${simplifyRack(b.rack)}</td>
+          <td>${simplifyRack(b._rack_assignment)}</td>
           <td>${b.name||'—'}</td>
           <td>
             <div class="yield-wrap">
@@ -936,7 +957,7 @@ function renderForDate(viewDate) {
           <td>${b.number_of_trays||'?'}</td>
           <td>${b.optimal_unstack_date||'—'}</td>
           <td>${seedDensity}</td>
-          <td>${simplifyRack(b.rack)}</td>
+          <td>${simplifyRack(b._rack_assignment)}</td>
         </tr>`;
       });
       return `<div class="tbl-wrap"><table>
