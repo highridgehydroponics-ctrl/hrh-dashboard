@@ -270,6 +270,7 @@
 <script>
 const ORDERS = { appId: 'bea55701-8006-4581-a791-19a75092943f', apiKey: 'V2-f4zl4-pDmwB-IZ9zh-t6ari-vPhJu-FmAwJ-WQ46U-LIUqO' };
 const GR     = { appId: 'fe7f55b7-a021-4f49-a9cb-c5528e8de84e', apiKey: 'V2-yQryr-d6cw2-Th5B2-TE8Na-aNKjx-YAnBI-K7AzT-iVWEh' };
+const DELIV  = { appId: 'f57f33e9-2515-46d3-8394-168d7e834ded', apiKey: 'V2-pFgDb-yYzyx-qffc2-gm2Nd-6hoHq-cjOXi-i3CQt-nRkVZ' };
 const GC     = { appId: '0ddb09d1-5e1c-434e-9e6e-ce46a54cd628', apiKey: 'V2-tSZCd-mCmE9-JdcyR-TIS5Q-grSxm-EKYUM-EkcIV-0CHoS' };
 
 const ALL_SECTIONS = ['sec-packout','sec-stops','sec-harvest','sec-labels','sec-oz','sec-plant','sec-tomorrow'];
@@ -493,7 +494,7 @@ function updateYield(input, total, barId) {
 // ── RENDER ────────────────────────────────────────────────────────────────────
 function renderForDate(viewDate) {
   if (!__store) return;
-  const { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap, mixMap } = __store;
+  const { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap, mixMap, deliveryByOrder } = __store;
 
   const todayStr = fmt(viewDate);
   const tmrStr   = fmt(addDays(viewDate, 1));
@@ -701,9 +702,20 @@ function renderForDate(viewDate) {
       const stopTotal = items.reduce((s,it) => s + (parseFloat(it.total_price)||0), 0);
       const groupId  = `${idPrefix}_${oi}`;
       const derivedStatus = deriveOrderStatus(ord.id, todayDetails, ord);
+
+      // Route info from Deliveries app
+      const route = (deliveryByOrder || {})[ord.id];
+      const routeHtml = route ? `
+        <span style="display:inline-flex;gap:10px;font-size:0.72rem;font-weight:500;color:#555;margin-left:8px;align-items:center;flex-wrap:wrap">
+          <span title="Driver">🧑‍✈️ ${route.driver}</span>
+          <span title="Vehicle">🚚 ${route.vehicle}</span>
+          <span title="Scheduled time">🕐 ${route.schedTime}${route.actlTime ? ' → ' + route.actlTime : ''}</span>
+          <span title="Route status" style="color:${route.status==='Completed'?'#16a34a':route.status==='In Progress'?'#ea580c':'#888'}">${route.status}</span>
+        </span>` : '';
+
       st += `<tr style="cursor:pointer;background:#f0f4fb;font-weight:600" onclick="toggleStopRows('${groupId}')">
         <td><span id="stopchev_${groupId}" style="color:#1a56cc;font-size:0.75rem;margin-right:5px">▶</span>${stopCell}</td>
-        <td style="color:#222">${ord.client_name}</td>
+        <td style="color:#222">${ord.client_name}${routeHtml}</td>
         <td></td><td></td>
         <td></td>
         <td style="text-align:right;color:#333">${stopTotal>0?'$'+stopTotal.toFixed(2):''}</td>
@@ -1083,27 +1095,30 @@ async function loadData() {
   document.getElementById('warnBadge').style.display = 'none';
 
   try {
-    const [sliceAll, ordersAll, detailAll, batchAll, varietyAll, clientAll, varietyMixAll] = await Promise.all([
+    const [sliceAll, ordersAll, detailAll, batchAll, varietyAll, clientAll, varietyMixAll, deliveryAll, vehicleAll] = await Promise.all([
       appFetch(ORDERS, 'labels to print upcoming week only'),
       appFetch(ORDERS, 'order'),
       appFetch(ORDERS, 'order_detail'),
       appFetch(GC,     'batch'),
       appFetch(GR,     'variety'),
       appFetch(ORDERS, 'client'),
-      appFetch(GR,     'variety_mix')
+      appFetch(GR,     'variety_mix'),
+      appFetch(DELIV,  'delivery'),
+      appFetch(DELIV,  'vehicle')
     ]);
 
     const varMap = {};
     varietyAll.forEach(v => { varMap[v.id] = v; });
 
     // Build mix map: keyed by mix variety ID → array of { componentName, pct }
-    // API fields: variety_to_mix = the mix, variety = the component, percent = decimal (0.5 = 50%)
+    // API fields: variety = the MIX variety, variety_to_mix = the COMPONENT going into it, percent = decimal (0.5 = 50%)
+    // "variety_to_mix" means "this component variety IS TO BE MIXED INTO [variety]"
     const mixMap = {};
     varietyMixAll.forEach(m => {
-      const mixId  = m.variety_to_mix;
-      const compId = m.variety;
+      const mixId  = m.variety;          // the mix (e.g. Rainbow Mix)
+      const compId = m.variety_to_mix;   // the ingredient going into it
       const pct    = Math.round(parseFloat(m.percent || 0) * 100);
-      if (!mixId || !compId) return;
+      if (!mixId || !compId || !pct) return;
       if (!mixMap[mixId]) mixMap[mixId] = [];
       const compVar = varMap[compId];
       mixMap[mixId].push({ componentId: compId, componentName: compVar ? compVar.name : compId, pct });
@@ -1125,7 +1140,32 @@ async function loadData() {
       });
     });
 
-    __store = { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap, mixMap };
+    // ── DELIVERY ROUTE DATA ──────────────────────────────────────────────────
+    // vehicleMap: vehicle ID → friendly name (e.g. "VEH1ABCD" → "Truck #1")
+    const vehicleMap = {};
+    if (Array.isArray(vehicleAll)) vehicleAll.forEach(v => { if (v.id) vehicleMap[v.id] = v.name || v.id; });
+
+    // deliveryByOrder: order ID → delivery info (driver, vehicle, scheduled time, status, delivery id)
+    // delivery.orders is a comma-separated list of order IDs
+    const deliveryByOrder = {};
+    if (Array.isArray(deliveryAll)) {
+      deliveryAll.forEach(d => {
+        const orderIds = (d.orders || '').split(',').map(s => s.trim()).filter(Boolean);
+        // Parse driver name from _staff_text e.g. "Assigned Staff: Joe A."
+        const driverRaw = (d._staff_text || '').replace(/^Assigned Staff:\s*/i, '').trim();
+        const info = {
+          driver:    driverRaw || '—',
+          vehicle:   vehicleMap[d.vehicle] || d.vehicle || '—',
+          schedTime: d.scheduled_time ? d.scheduled_time.slice(0,5) : '—',  // HH:MM
+          actlTime:  d.actual_time    ? d.actual_time.slice(0,5)    : null,
+          status:    d.status || '—',
+          delivId:   d.id
+        };
+        orderIds.forEach(oid => { deliveryByOrder[oid] = info; });
+      });
+    }
+
+    __store = { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap, mixMap, deliveryByOrder };
 
     document.getElementById('loading').style.display = 'none';
     document.getElementById('content').style.display  = 'block';
