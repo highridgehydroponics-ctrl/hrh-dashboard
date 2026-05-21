@@ -130,6 +130,27 @@
   .delivery-sub-label.upcoming-lbl { color: #ea580c; }
   .delivery-sub-label.done-lbl     { color: #16a34a; }
 
+  /* ── ROUTE CARDS ── */
+  .route-card { background: #f8f9fc; border: 1px solid #e2e5ef; border-radius: 10px;
+    margin-bottom: 12px; overflow: hidden; }
+  .route-card:last-child { margin-bottom: 0; }
+  .route-card-hdr { display: flex; align-items: center; gap: 10px; padding: 13px 16px;
+    cursor: pointer; user-select: none; transition: background .12s; }
+  .route-card-hdr:hover { background: #eef0f9; }
+  .route-chev { color: #1a56cc; font-size: 0.75rem; flex-shrink: 0; width: 14px; }
+  .route-card-info { display: flex; align-items: center; gap: 14px; flex: 1; flex-wrap: wrap; }
+  .route-driver  { font-weight: 700; font-size: 0.88rem; color: #1a1a2e; }
+  .route-vehicle { font-size: 0.82rem; color: #555; }
+  .route-time    { font-size: 0.82rem; color: #555; }
+  .route-status-badge { font-size: 0.75rem; font-weight: 700; padding: 2px 8px;
+    border-radius: 8px; background: rgba(0,0,0,.06); }
+  .route-card-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .route-stops-count { font-size: 0.75rem; font-weight: 600; color: #888; white-space: nowrap; }
+  .route-total { font-size: 0.82rem; font-weight: 700; color: #333; white-space: nowrap; }
+  .route-card-body { border-top: 1px solid #e2e5ef; background: #fff; }
+  .stop-hdr-row { cursor: pointer; }
+  .stop-hdr-row:hover td { background: #f4f6fb !important; }
+
   /* Date groups */
   .date-group { font-weight: 600; color: #aaa; font-size: 0.78rem;
     padding: 8px 0 4px; border-top: 1px solid #eef0f5; margin-top: 8px; }
@@ -301,6 +322,22 @@ function setHarvestOverride(id, field, value, total, barId) {
   if (btn) { btn.textContent = 'Save'; btn.className = 'save-btn'; }
 }
 
+function toggleRouteCard(ri) {
+  const body = document.getElementById('rcbody_' + ri);
+  const chev = document.getElementById('rcchev_' + ri);
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (chev) chev.textContent = open ? '▶' : '▼';
+}
+function toggleStopDetail(sdId) {
+  const row = document.getElementById('sdrow_' + sdId);
+  const chev = document.getElementById('sdchev_' + sdId);
+  if (!row) return;
+  const open = row.style.display !== 'none';
+  row.style.display = open ? 'none' : 'table-row';
+  if (chev) chev.textContent = open ? '▶' : '▼';
+}
 function toggleOzRow(id) {
   const el = document.getElementById(id);
   const chev = document.getElementById('chev_' + id);
@@ -494,7 +531,7 @@ function updateYield(input, total, barId) {
 // ── RENDER ────────────────────────────────────────────────────────────────────
 function renderForDate(viewDate) {
   if (!__store) return;
-  const { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap, mixMap, deliveryByOrder } = __store;
+  const { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap, mixMap, deliveryByOrder, delivItemAll, deliveryAll, vehicleMap } = __store;
 
   const todayStr = fmt(viewDate);
   const tmrStr   = fmt(addDays(viewDate, 1));
@@ -527,6 +564,38 @@ function renderForDate(viewDate) {
     const s = (deriveOrderStatus(o.id, todayDetails, o) || o.status || '').toLowerCase();
     return s.includes('cancel');
   });
+
+  // ── TODAY'S ROUTES (from Deliveries app: delivery + delivery_item) ──
+  const todayRoutes = [];
+  if (Array.isArray(deliveryAll) && Array.isArray(delivItemAll)) {
+    deliveryAll.filter(d => (d.scheduled_date||'').trim() === todayStr).forEach(d => {
+      const driverRaw = (d._staff_text || '').replace(/^Assigned Staff:\s*/i, '').trim();
+      const route = {
+        id: d.id,
+        driver:    driverRaw || '—',
+        vehicle:   (vehicleMap||{})[d.vehicle] || d.vehicle || '—',
+        schedTime: d.scheduled_time ? d.scheduled_time.slice(0,5) : '—',
+        actlTime:  d.actual_time    ? d.actual_time.slice(0,5)    : null,
+        status:    d.status || '—',
+        stops: []
+      };
+      const routeItems = delivItemAll.filter(di => di.delivery === d.id)
+        .sort((a,b) => (parseInt(a.sorter)||999) - (parseInt(b.sorter)||999));
+      routeItems.forEach(di => {
+        const ord = orderMap[di.order];
+        if (!ord) return;
+        route.stops.push({
+          orderId:     di.order,
+          sorter:      di.sorter,
+          clientName:  ord.client_name || di._client_name || '—',
+          stopNumber:  ord.stop_number,
+          invoiceSent: ord.invoice_sent || '—',
+          orderStatus: deriveOrderStatus(di.order, todayDetails, ord)
+        });
+      });
+      todayRoutes.push(route);
+    });
+  }
 
   // ── KPI BAR ──
   const totalLabels = labelsToday.length + labelsTmr.length;
@@ -588,7 +657,7 @@ function renderForDate(viewDate) {
 
   const totalHarvestTrays = allHarvestToday.reduce((sum, b) => sum + (parseInt(b.number_of_trays)||0), 0);
   const kpiDefs = [
-    { val: activeOrders.length,    label: 'Deliveries Today',                                  target: 'sec-stops',   cls: 'kpi-green'  },
+    { val: todayRoutes.length || activeOrders.length, label: 'Delivery Routes Today',           target: 'sec-stops',   cls: 'kpi-green'  },
     { val: upcomingItems.length,   label: 'Remaining Items to Pack Out for Today\'s Deliveries', target: 'sec-packout', cls: 'kpi-orange' },
     { val: totalLabels,            label: 'Labels to Print for TMRO Orders',                    target: 'sec-labels',  cls: 'kpi-orange' },
     { val: allHarvestToday.length, label: 'Batches to Harvest Today for TMRO Orders',           target: 'sec-harvest', cls: 'kpi-blue'   },
@@ -673,86 +742,110 @@ function renderForDate(viewDate) {
   }
   document.getElementById('packout-body').innerHTML = packHtml;
 
-  // ── DELIVERIES TODAY (split: upcoming vs completed, collapsible) ──
-  document.getElementById('badge-stops-today').textContent = activeOrders.length;
+  // ── DELIVERIES TODAY (route cards) ──
+  document.getElementById('badge-stops-today').textContent = todayRoutes.length || activeOrders.length;
 
-  const upcomingStops   = sortedOrders.filter(ord => {
-    const s = (deriveOrderStatus(ord.id, todayDetails, ord) || '').toLowerCase();
-    return !s.includes('complet');
-  });
-  const completedStops  = sortedOrders.filter(ord => {
-    const s = (deriveOrderStatus(ord.id, todayDetails, ord) || '').toLowerCase();
-    return s.includes('complet');
-  });
-
-  function buildStopsTable(orders, idPrefix) {
-    if (!orders.length) return '<div class="empty" style="padding:6px 0">None</div>';
-    let st = `<div class="tbl-wrap"><table>
-      <thead><tr>
-        <th>Stop #</th><th>Customer</th><th>Item Status</th><th>Qty</th>
-        <th>Unit $</th><th>Total $</th><th>Order Status</th><th>Bring Invoice w Delivery?</th>
-      </tr></thead><tbody>`;
-    orders.forEach((ord, oi) => {
-      const prefs    = clientPrefs[ord.client_name]||{};
-      const invTxt   = prefs.bring_invoice === 'Y'
-        ? '<span class="inv-yes">Yes</span>' : '<span class="inv-no">No</span>';
-      const stopCell = ord.stop_number ? `<span class="stop-num">${ord.stop_number}</span>` : '—';
-      const items    = todayDetails.filter(d => d.order === ord.id)
-        .sort((a,b) => (a.product_name||'').localeCompare(b.product_name||''));
-      const stopTotal = items.reduce((s,it) => s + (parseFloat(it.total_price)||0), 0);
-      const groupId  = `${idPrefix}_${oi}`;
-      const derivedStatus = deriveOrderStatus(ord.id, todayDetails, ord);
-
-      // Route info from Deliveries app
-      const route = (deliveryByOrder || {})[ord.id];
-      const routeHtml = route ? `
-        <span style="display:inline-flex;gap:10px;font-size:0.72rem;font-weight:500;color:#555;margin-left:8px;align-items:center;flex-wrap:wrap">
-          <span title="Driver">🧑‍✈️ ${route.driver}</span>
-          <span title="Vehicle">🚚 ${route.vehicle}</span>
-          <span title="Scheduled time">🕐 ${route.schedTime}${route.actlTime ? ' → ' + route.actlTime : ''}</span>
-          <span title="Route status" style="color:${route.status==='Completed'?'#16a34a':route.status==='In Progress'?'#ea580c':'#888'}">${route.status}</span>
-        </span>` : '';
-
-      st += `<tr style="cursor:pointer;background:#f0f4fb;font-weight:600" onclick="toggleStopRows('${groupId}')">
-        <td><span id="stopchev_${groupId}" style="color:#1a56cc;font-size:0.75rem;margin-right:5px">▶</span>${stopCell}</td>
-        <td style="color:#222">${ord.client_name}${routeHtml}</td>
-        <td></td><td></td>
-        <td></td>
-        <td style="text-align:right;color:#333">${stopTotal>0?'$'+stopTotal.toFixed(2):''}</td>
-        <td>${statusPill(derivedStatus || ord.status)}</td>
-        <td>${invTxt}</td>
-      </tr>`;
-      if (!items.length) {
-        st += `<tr class="stoprows_${groupId}" style="display:none">
-          <td></td><td colspan="6" class="empty" style="padding-left:16px">No items</td><td></td>
-        </tr>`;
-      } else {
-        items.forEach(it => {
-          const lt = parseFloat(it.total_price)||0;
-          st += `<tr class="stoprows_${groupId}" style="display:none">
-            <td></td>
-            <td style="padding-left:16px">${it.product_name||'—'}</td>
-            <td>${itemStatusText(it.status)}</td>
-            <td><span class="qty-badge">${it.quantity_boxes||0}</span></td>
-            <td>${it.unit_price?'$'+parseFloat(it.unit_price).toFixed(2):'—'}</td>
-            <td>${lt?'$'+lt.toFixed(2):'—'}</td>
-            <td></td><td></td>
-          </tr>`;
-        });
-      }
-    });
-    return st + '</tbody></table></div>';
-  }
-
-  if (!activeOrders.length) {
-    document.getElementById('stops-today-body').innerHTML = '<div class="empty">No deliveries for this date.</div>';
+  if (!todayRoutes.length) {
+    // Fallback: no route data yet — show order-level info if orders exist
+    if (activeOrders.length) {
+      document.getElementById('stops-today-body').innerHTML =
+        `<div class="empty" style="color:#888">Route data not yet assigned. ${activeOrders.length} order(s) scheduled for this date.</div>`;
+    } else {
+      document.getElementById('stops-today-body').innerHTML = '<div class="empty">No deliveries for this date.</div>';
+    }
   } else {
-    const stopsHtml =
-      `<div class="delivery-sub-label upcoming-lbl">⏳ Upcoming Deliveries (${upcomingStops.length})</div>` +
-      buildStopsTable(upcomingStops, 'upd') +
-      `<div class="delivery-sub-label done-lbl" style="margin-top:14px">✅ Completed Deliveries (${completedStops.length})</div>` +
-      buildStopsTable(completedStops, 'cpd');
-    document.getElementById('stops-today-body').innerHTML = stopsHtml;
+    let routesHtml = '';
+    todayRoutes.forEach((route, ri) => {
+      const statusColor = route.status === 'Completed' ? '#16a34a'
+        : route.status === 'In Progress' ? '#ea580c' : '#888';
+      const timeStr = route.schedTime + (route.actlTime ? ` → ${route.actlTime}` : '');
+      // Precompute per-stop totals
+      const stopTotals = route.stops.map(stop =>
+        todayDetails.filter(d => d.order === stop.orderId)
+          .reduce((s,it) => s + (parseFloat(it.total_price)||0), 0)
+      );
+      const routeTotal = stopTotals.reduce((a,b) => a+b, 0);
+
+      routesHtml += `
+      <div class="route-card">
+        <div class="route-card-hdr" onclick="toggleRouteCard('${ri}')">
+          <span id="rcchev_${ri}" class="route-chev">▶</span>
+          <div class="route-card-info">
+            <span class="route-driver">🧑‍✈️ ${route.driver}</span>
+            <span class="route-vehicle">🚚 ${route.vehicle}</span>
+            <span class="route-time">🕐 ${timeStr}</span>
+            <span class="route-status-badge" style="color:${statusColor}">${route.status}</span>
+          </div>
+          <div class="route-card-meta">
+            <span class="route-stops-count">${route.stops.length} stop${route.stops.length!==1?'s':''}</span>
+            ${routeTotal > 0 ? `<span class="route-total">$${routeTotal.toFixed(2)}</span>` : ''}
+          </div>
+        </div>
+        <div class="route-card-body" id="rcbody_${ri}" style="display:none">
+          <div class="tbl-wrap"><table>
+            <thead><tr>
+              <th style="width:28px"></th>
+              <th>Stop</th><th>Customer</th><th>Order Status</th>
+              <th>Invoice Sent?</th><th style="text-align:right">Total</th>
+            </tr></thead>
+            <tbody>`;
+
+      route.stops.forEach((stop, si) => {
+        const sdId = `${ri}_${si}`;
+        const items = todayDetails.filter(d => d.order === stop.orderId)
+          .sort((a,b) => (a.product_name||'').localeCompare(b.product_name||''));
+        const stopTotal = stopTotals[si];
+        const invRaw = (stop.invoiceSent||'').toLowerCase().trim();
+        const invHtml = (invRaw === 'yes' || invRaw === 'y')
+          ? '<span style="color:#16a34a;font-weight:600">✓ Yes</span>'
+          : (invRaw === 'no' || invRaw === 'n' || invRaw === '—' || !invRaw)
+            ? '<span style="color:#ccc">No</span>'
+            : `<span style="font-size:0.8rem;color:#888">${stop.invoiceSent}</span>`;
+        const stopNumHtml = stop.stopNumber ? `<span class="stop-num">${stop.stopNumber}</span>` : '—';
+
+        routesHtml += `
+              <tr class="stop-hdr-row" onclick="toggleStopDetail('${sdId}')">
+                <td><span id="sdchev_${sdId}" style="color:#1a56cc;font-size:0.75rem">▶</span></td>
+                <td>${stopNumHtml}</td>
+                <td style="font-weight:600;color:#222">${stop.clientName}</td>
+                <td>${statusPill(stop.orderStatus)}</td>
+                <td>${invHtml}</td>
+                <td style="text-align:right;color:#333">${stopTotal>0?'$'+stopTotal.toFixed(2):'—'}</td>
+              </tr>
+              <tr id="sdrow_${sdId}" style="display:none">
+                <td colspan="6" style="padding:0 0 10px 32px;background:#f4f7ff">`;
+
+        if (!items.length) {
+          routesHtml += `<div class="empty" style="padding:6px 0">No items</div>`;
+        } else {
+          routesHtml += `<table style="width:100%;font-size:0.82rem;margin:6px 0">
+                  <thead><tr>
+                    <th style="color:#aaa;padding:4px 8px">Product</th>
+                    <th style="color:#aaa;padding:4px 8px">Qty</th>
+                    <th style="color:#aaa;padding:4px 8px">Unit $</th>
+                    <th style="color:#aaa;padding:4px 8px">Total $</th>
+                    <th style="color:#aaa;padding:4px 8px">Status</th>
+                  </tr></thead><tbody>`;
+          items.forEach(it => {
+            const lt = parseFloat(it.total_price)||0;
+            routesHtml += `<tr>
+                    <td style="padding:4px 8px">${it.product_name||'—'}</td>
+                    <td style="padding:4px 8px"><span class="qty-badge">${it.quantity_boxes||0}</span></td>
+                    <td style="padding:4px 8px">${it.unit_price?'$'+parseFloat(it.unit_price).toFixed(2):'—'}</td>
+                    <td style="padding:4px 8px">${lt?'$'+lt.toFixed(2):'—'}</td>
+                    <td style="padding:4px 8px">${itemStatusText(it.status)}</td>
+                  </tr>`;
+          });
+          routesHtml += `</tbody></table>`;
+        }
+        routesHtml += `</td></tr>`;
+      });
+
+      routesHtml += `</tbody></table></div>
+        </div>
+      </div>`;
+    });
+    document.getElementById('stops-today-body').innerHTML = routesHtml;
   }
 
   // ── HARVEST TODAY (pending + completed, grouped by M1/M2) ──
@@ -1095,7 +1188,7 @@ async function loadData() {
   document.getElementById('warnBadge').style.display = 'none';
 
   try {
-    const [sliceAll, ordersAll, detailAll, batchAll, varietyAll, clientAll, varietyMixAll, deliveryAll, vehicleAll] = await Promise.all([
+    const [sliceAll, ordersAll, detailAll, batchAll, varietyAll, clientAll, varietyMixAll, deliveryAll, vehicleAll, delivItemAll] = await Promise.all([
       appFetch(ORDERS, 'labels to print upcoming week only'),
       appFetch(ORDERS, 'order'),
       appFetch(ORDERS, 'order_detail'),
@@ -1104,7 +1197,8 @@ async function loadData() {
       appFetch(ORDERS, 'client'),
       appFetch(GR,     'variety_mix'),
       appFetch(DELIV,  'delivery'),
-      appFetch(DELIV,  'vehicle')
+      appFetch(DELIV,  'vehicle'),
+      appFetch(DELIV,  'delivery_item')
     ]);
 
     const varMap = {};
@@ -1165,7 +1259,7 @@ async function loadData() {
       });
     }
 
-    __store = { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap, mixMap, deliveryByOrder };
+    __store = { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap, mixMap, deliveryByOrder, delivItemAll, deliveryAll, vehicleMap };
 
     document.getElementById('loading').style.display = 'none';
     document.getElementById('content').style.display  = 'block';
