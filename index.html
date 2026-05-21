@@ -181,7 +181,10 @@
       <button id="showAllBtn" onclick="showAll()">← Show All</button>
       <span id="warnBadge" class="warn-badge" style="display:none">⚠️ Live fetch failed — showing cached data</span>
       <button id="printBtn" onclick="window.print()">🖨 Print</button>
-      <button id="refreshBtn" onclick="loadData()">⚡ Refresh</button>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+        <button id="refreshBtn" onclick="loadData()">⚡ Refresh</button>
+        <span id="lastRefresh" style="font-size:0.68rem;color:#aaa;display:none"></span>
+      </div>
     </div>
   </div>
 
@@ -908,6 +911,8 @@ async function loadData() {
 
     document.getElementById('loading').style.display = 'none';
     document.getElementById('content').style.display  = 'block';
+    const lr = document.getElementById('lastRefresh');
+    if (lr) { lr.textContent = 'Updated ' + new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); lr.style.display='inline'; }
     renderForDate(__viewDate);
 
   } catch(err) {
