@@ -461,7 +461,7 @@ function updateYield(input, total, barId) {
 // ── RENDER ────────────────────────────────────────────────────────────────────
 function renderForDate(viewDate) {
   if (!__store) return;
-  const { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap } = __store;
+  const { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap, mixMap } = __store;
 
   const todayStr = fmt(viewDate);
   const tmrStr   = fmt(addDays(viewDate, 1));
@@ -519,10 +519,13 @@ function renderForDate(viewDate) {
   });
   const plantTraySum = nonLettuceNonMixForKpi.reduce((sum, b) => sum + (parseInt(b.number_of_trays)||0), 0);
   // Build oz-by-variety map — single day, includes mixes (not lettuce), sorted A-Z
+  // Live tray products are excluded from oz totals
   const ozDate = __allocDate || todayStr;
   const ozDayDetails = detailAll.filter(d => d.fulfillment_date === ozDate);
   const ozByVariety = {};
   ozDayDetails.forEach(d => {
+    // Skip live tray products (they don't contribute to oz harvest needs)
+    if ((d.product_name||'').toLowerCase().includes('live')) return;
     const v = varMap[d.variety];
     if (v) {
       if (v.reserve_1 === 'Lettuce') return;
@@ -532,7 +535,7 @@ function renderForDate(viewDate) {
     const oz = parseFloat(d.total_ounces)||0;
     if (!oz) return;
     const vname = v ? (v.name || d.variety) : (d.variety || '—');
-    if (!ozByVariety[vname]) ozByVariety[vname] = { total: 0, items: [] };
+    if (!ozByVariety[vname]) ozByVariety[vname] = { total: 0, items: [], varietyId: d.variety };
     ozByVariety[vname].total += oz;
     ozByVariety[vname].items.push({
       customer: d.client_name || '—',
@@ -636,8 +639,8 @@ function renderForDate(viewDate) {
   } else {
     let st = `<div class="tbl-wrap"><table>
       <thead><tr>
-        <th>Stop #</th><th>Customer</th><th>Qty</th><th>Oz</th><th>Total $</th>
-        <th>Status</th><th>Invoice</th>
+        <th>Stop #</th><th>Customer</th><th>Item Status</th><th>Qty</th>
+        <th>Unit $</th><th>Total $</th><th>Order Status</th><th>Bring Invoice w Delivery?</th>
       </tr></thead><tbody>`;
     sortedOrders.forEach((ord, oi) => {
       const prefs   = clientPrefs[ord.client_name]||{};
@@ -653,13 +656,14 @@ function renderForDate(viewDate) {
         <td><span id="stopchev_${groupId}" style="color:#1a56cc;font-size:0.75rem;margin-right:5px">▼</span>${stopCell}</td>
         <td style="color:#222">${ord.client_name}</td>
         <td></td><td></td>
+        <td></td>
         <td style="text-align:right;color:#333">${stopTotal>0?'$'+stopTotal.toFixed(2):''}</td>
         <td>${statusPill(ord.status)}</td>
         <td>${invTxt}</td>
       </tr>`;
       if (!items.length) {
         st += `<tr class="stoprows_${groupId}">
-          <td></td><td colspan="5" class="empty" style="padding-left:16px">No items</td><td></td>
+          <td></td><td colspan="6" class="empty" style="padding-left:16px">No items</td><td></td>
         </tr>`;
       } else {
         items.forEach(it => {
@@ -667,11 +671,11 @@ function renderForDate(viewDate) {
           st += `<tr class="stoprows_${groupId}">
             <td></td>
             <td style="padding-left:16px">${it.product_name||'—'}</td>
-            <td><span class="qty-badge">${it.quantity_boxes||0}</span></td>
-            <td>${it.total_ounces||0}</td>
-            <td>${lt?'$'+lt.toFixed(2):'—'}</td>
             <td>${itemStatusText(it.status)}</td>
-            <td></td>
+            <td><span class="qty-badge">${it.quantity_boxes||0}</span></td>
+            <td>${it.unit_price?'$'+parseFloat(it.unit_price).toFixed(2):'—'}</td>
+            <td>${lt?'$'+lt.toFixed(2):'—'}</td>
+            <td></td><td></td>
           </tr>`;
         });
       }
@@ -694,6 +698,8 @@ function renderForDate(viewDate) {
     let html = '';
     const containerOrder = Object.keys(groups).sort();
     containerOrder.forEach(container => {
+      // Sort batches alphabetically by rack within each container
+      groups[container].sort((a,b) => simplifyRack(a.rack).localeCompare(simplifyRack(b.rack)));
       html += `<span class="container-group">${container}</span>`;
       html += `<div class="tbl-wrap"><table>
         <thead><tr>
@@ -804,9 +810,12 @@ function renderForDate(viewDate) {
       <thead><tr><th style="width:30px"></th><th>Variety</th><th>Total Oz</th></tr></thead><tbody>`;
     ozEntries.forEach(([name, data], idx) => {
       const rowId = 'ozrow_' + idx;
+      const isMix = data.varietyId && varMap[data.varietyId] && varMap[data.varietyId]['mix?'] === 'Y';
+      const mixComponents = (data.varietyId && mixMap && mixMap[data.varietyId]) ? mixMap[data.varietyId] : null;
+      const mixBadge = isMix ? `<span style="font-size:0.68rem;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px;margin-left:6px;font-weight:600">MIX</span>` : '';
       oz += `<tr style="cursor:pointer" onclick="toggleOzRow('${rowId}')">
         <td><span id="chev_${rowId}" style="color:#1a56cc;font-size:0.8rem">▶</span></td>
-        <td style="font-weight:600">${name}</td>
+        <td style="font-weight:600">${name}${mixBadge}</td>
         <td class="oz-total">${data.total} oz</td>
       </tr>
       <tr id="${rowId}" style="display:none">
@@ -814,34 +823,50 @@ function renderForDate(viewDate) {
           <table style="width:100%;font-size:0.8rem;margin-top:6px">
             <thead><tr>
               <th style="color:#aaa;font-weight:600;padding:4px 8px">Product</th>
-              <th style="color:#aaa;font-weight:600;padding:4px 8px">Customer</th>
               <th style="color:#aaa;font-weight:600;padding:4px 8px">Qty</th>
               <th style="color:#aaa;font-weight:600;padding:4px 8px">Oz</th>
+              <th style="color:#aaa;font-weight:600;padding:4px 8px">Customer</th>
             </tr></thead>
             <tbody>`;
-      // Group by product_name, customers sorted A-Z within each product
+      // Group by product_name sorted A-Z, customers sorted A-Z within each product
       const byProd = {};
       data.items.forEach(it => {
         if (!byProd[it.product]) byProd[it.product] = [];
         byProd[it.product].push(it);
       });
-      Object.entries(byProd).forEach(([prod, prodItems]) => {
+      Object.entries(byProd).sort(([a],[b]) => a.localeCompare(b)).forEach(([prod, prodItems]) => {
         const sortedCust = [...prodItems].sort((a,b) => a.customer.localeCompare(b.customer));
         sortedCust.forEach((it, ci) => {
           oz += `<tr>
             <td style="padding:3px 8px;color:#444;font-weight:${ci===0?'600':'400'}">${ci===0?prod:''}</td>
-            <td style="padding:3px 8px;color:#444">${it.customer}</td>
             <td style="padding:3px 8px;font-weight:600;color:#ea580c">${it.qty}</td>
             <td style="padding:3px 8px;font-weight:600;color:#ea580c">${it.oz} oz</td>
+            <td style="padding:3px 8px;color:#555">${it.customer}</td>
           </tr>`;
         });
       });
+      // Mix recipe breakdown
+      if (isMix && mixComponents && mixComponents.length) {
+        oz += `<tr><td colspan="4" style="padding:6px 8px 2px;background:#fff8ed;border-top:1px solid #fde68a">
+          <span style="font-size:0.73rem;font-weight:700;color:#b45309;text-transform:uppercase;letter-spacing:.04em">🧪 Mix Recipe</span>
+        </td></tr>`;
+        // Sort components alphabetically
+        [...mixComponents].sort((a,b) => a.componentName.localeCompare(b.componentName)).forEach(comp => {
+          const compOz = Math.round(data.total * comp.pct / 100 * 10) / 10;
+          oz += `<tr style="background:#fff8ed">
+            <td style="padding:3px 8px;color:#92400e;font-style:italic">${comp.componentName}</td>
+            <td style="padding:3px 8px;color:#b45309;font-weight:600">${comp.pct}%</td>
+            <td style="padding:3px 8px;color:#b45309;font-weight:600">${compOz} oz</td>
+            <td style="padding:3px 8px;color:#aaa;font-size:0.75rem">of ${data.total} oz total</td>
+          </tr>`;
+        });
+      }
       oz += `</tbody></table></td></tr>`;
     });
     document.getElementById('oz-body').innerHTML = oz + '</tbody></table></div>';
   }
 
-  // ── PLANTINGS ──
+  // ── PLANTINGS (split: Pending = upcoming, Completed = stacked on shelf) ──
   document.getElementById('badge-plant').textContent = plantTraySum;
   if (!nonLettuceNonMixForKpi.length) {
     document.getElementById('plant-body').innerHTML = '<div class="empty">No plantings for this date.</div>';
@@ -852,19 +877,43 @@ function renderForDate(viewDate) {
       const nameB = (varMap[b.variety]?.name || b.variety || '').toLowerCase();
       return nameA.localeCompare(nameB);
     });
-    let p = `<div class="tbl-wrap"><table>
-      <thead><tr><th>Batch</th><th>Trays</th><th>Optimal Unstack Date</th><th>Seed Density</th></tr></thead><tbody>`;
-    sortedPlantings.forEach(b => {
-      const v = varMap[b.variety];
-      const seedDensity = v ? (v.sd || '—') : '—';
-      p += `<tr>
-        <td>${b.name||'—'}</td>
-        <td>${b.number_of_trays||'?'}</td>
-        <td>${b.optimal_unstack_date||'—'}</td>
-        <td>${seedDensity}</td>
-      </tr>`;
+    const pendingPlantings   = sortedPlantings.filter(b => (b.status_name||'').toLowerCase().includes('upcoming'));
+    const completedPlantings = sortedPlantings.filter(b => (b.status_name||'').toLowerCase().includes('stacked'));
+    const otherPlantings     = sortedPlantings.filter(b => {
+      const s = (b.status_name||'').toLowerCase();
+      return !s.includes('upcoming') && !s.includes('stacked');
     });
-    document.getElementById('plant-body').innerHTML = p + '</tbody></table></div>';
+
+    function buildPlantTable(batches) {
+      if (!batches.length) return '<div class="empty" style="padding:6px 0">None</div>';
+      let rows = '';
+      batches.forEach(b => {
+        const v = varMap[b.variety];
+        const seedDensity = v ? (v.sd || '—') : '—';
+        rows += `<tr>
+          <td>${b.name||'—'}</td>
+          <td>${b.number_of_trays||'?'}</td>
+          <td>${b.optimal_unstack_date||'—'}</td>
+          <td>${seedDensity}</td>
+          <td>${simplifyRack(b.rack)}</td>
+        </tr>`;
+      });
+      return `<div class="tbl-wrap"><table>
+        <thead><tr><th>Batch</th><th>Trays</th><th>Optimal Unstack Date</th><th>Seed Density</th><th>Rack</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
+    }
+
+    let p = '';
+    if (pendingPlantings.length || otherPlantings.length) {
+      p += `<div class="harvest-sub-label pending-lbl">⏳ Pending (${pendingPlantings.length + otherPlantings.length})</div>`;
+      p += buildPlantTable([...pendingPlantings, ...otherPlantings]);
+    }
+    if (completedPlantings.length) {
+      p += `<div class="harvest-sub-label done-lbl">✅ Stacked on Shelf (${completedPlantings.length})</div>`;
+      p += buildPlantTable(completedPlantings);
+    }
+    document.getElementById('plant-body').innerHTML = p;
   }
 
   // ── TOMORROW (collapsible header rows, alphabetical products) ──
@@ -877,8 +926,8 @@ function renderForDate(viewDate) {
   } else {
     let t = `<div class="tbl-wrap"><table>
       <thead><tr>
-        <th>Stop #</th><th>Customer</th><th>Qty</th><th>Oz</th><th>Total $</th>
-        <th>Status</th><th>Invoice</th>
+        <th>Stop #</th><th>Customer</th><th>Item Status</th><th>Qty</th>
+        <th>Unit $</th><th>Total $</th><th>Order Status</th><th>Bring Invoice w Delivery?</th>
       </tr></thead><tbody>`;
     sortedTmr.forEach((ord, oi) => {
       const prefs  = clientPrefs[ord.client_name]||{};
@@ -894,13 +943,14 @@ function renderForDate(viewDate) {
         <td><span id="stopchev_${groupId}" style="color:#1a56cc;font-size:0.75rem;margin-right:5px">▼</span>${stopCell}</td>
         <td style="color:#222">${ord.client_name}</td>
         <td></td><td></td>
+        <td></td>
         <td style="text-align:right;color:#333">${stopTotal>0?'$'+stopTotal.toFixed(2):''}</td>
         <td>${statusPill(ord.status)}</td>
         <td>${invTxt}</td>
       </tr>`;
       if (!items.length) {
         t += `<tr class="stoprows_${groupId}">
-          <td></td><td colspan="5" class="empty" style="padding-left:16px">No items</td><td></td>
+          <td></td><td colspan="6" class="empty" style="padding-left:16px">No items</td><td></td>
         </tr>`;
       } else {
         items.forEach(it => {
@@ -908,11 +958,11 @@ function renderForDate(viewDate) {
           t += `<tr class="stoprows_${groupId}">
             <td></td>
             <td style="padding-left:16px">${it.product_name||'—'}</td>
-            <td><span class="qty-badge">${it.quantity_boxes||0}</span></td>
-            <td>${it.total_ounces||0}</td>
-            <td>${lt?'$'+lt.toFixed(2):'—'}</td>
             <td>${itemStatusText(it.status)}</td>
-            <td></td>
+            <td><span class="qty-badge">${it.quantity_boxes||0}</span></td>
+            <td>${it.unit_price?'$'+parseFloat(it.unit_price).toFixed(2):'—'}</td>
+            <td>${lt?'$'+lt.toFixed(2):'—'}</td>
+            <td></td><td></td>
           </tr>`;
         });
       }
@@ -947,17 +997,30 @@ async function loadData() {
   document.getElementById('warnBadge').style.display = 'none';
 
   try {
-    const [sliceAll, ordersAll, detailAll, batchAll, varietyAll, clientAll] = await Promise.all([
+    const [sliceAll, ordersAll, detailAll, batchAll, varietyAll, clientAll, varietyMixAll] = await Promise.all([
       appFetch(ORDERS, 'labels to print upcoming week only'),
       appFetch(ORDERS, 'order'),
       appFetch(ORDERS, 'order_detail'),
       appFetch(GC,     'batch'),
       appFetch(GR,     'variety'),
-      appFetch(ORDERS, 'client')
+      appFetch(ORDERS, 'client'),
+      appFetch(GR,     'variety_mix')
     ]);
 
     const varMap = {};
     varietyAll.forEach(v => { varMap[v.id] = v; });
+
+    // Build mix map: keyed by mix variety ID → array of { componentName, pct }
+    const mixMap = {};
+    varietyMixAll.forEach(m => {
+      const mixId  = m.variety || m.mix_variety;
+      const compId = m.component_variety || m.component || m.ingredient_variety;
+      const pct    = parseFloat(m.percentage || m.ratio || m.percent || 0);
+      if (!mixId || !compId) return;
+      if (!mixMap[mixId]) mixMap[mixId] = [];
+      const compVar = varMap[compId];
+      mixMap[mixId].push({ componentId: compId, componentName: compVar ? compVar.name : compId, pct });
+    });
 
     const clientPrefs = {};
     clientAll.forEach(c => {
@@ -975,7 +1038,7 @@ async function loadData() {
       });
     });
 
-    __store = { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap };
+    __store = { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap, mixMap };
 
     document.getElementById('loading').style.display = 'none';
     document.getElementById('content').style.display  = 'block';
