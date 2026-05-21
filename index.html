@@ -785,7 +785,9 @@ function renderForDate(viewDate) {
           clientName:  ord.client_name || di._client_name || '—',
           stopNumber:  ord.stop_number,
           invoiceSent: ord['invoice_sent?'] || '',
-          orderStatus: deriveOrderStatus(di.order, todayDetails, ord)
+          orderStatus: deriveOrderStatus(di.order, todayDetails, ord),
+          delivStatus: di.status || '—',
+          delivTime:   ord.delivery_time_actual || '—'
         });
       });
       todayRoutes.push(route);
@@ -984,6 +986,7 @@ function renderForDate(viewDate) {
             <thead><tr>
               <th style="width:28px"></th>
               <th>Stop</th><th>Customer</th><th>Order Status</th>
+              <th>Delivery Status</th><th>Delivery Time</th>
               <th>Invoice Sent?</th><th style="text-align:right">Total</th>
             </tr></thead>
             <tbody>`;
@@ -1022,11 +1025,13 @@ function renderForDate(viewDate) {
                 <td>${stopNumHtml}</td>
                 <td style="font-weight:600;color:#222">${stop.clientName}</td>
                 <td>${orderStatusHtml}</td>
+                <td style="font-size:0.82rem;color:#555">${stop.delivStatus}</td>
+                <td style="font-size:0.82rem;color:#555">${stop.delivTime}</td>
                 <td>${invHtml}</td>
                 <td style="text-align:right;color:#333">${stopTotal>0?'$'+stopTotal.toFixed(2):'—'}</td>
               </tr>
               <tr id="sdrow_${sdId}" style="display:none">
-                <td colspan="6" style="padding:0 0 10px 32px;background:#f4f7ff">`;
+                <td colspan="8" style="padding:0 0 10px 32px;background:#f4f7ff">`;
 
         if (!items.length) {
           routesHtml += `<div class="empty" style="padding:6px 0">No items</div>`;
@@ -1182,14 +1187,14 @@ function renderForDate(viewDate) {
         lHtml += `<div style="border-bottom:1px solid #f2f4f8">
           <div style="display:flex;align-items:center;gap:8px;padding:9px 4px;cursor:pointer" onclick="toggleLabelRow('${lid}')">
             <span id="lchev_${lid}" style="color:#1a56cc;font-size:0.8rem;flex-shrink:0">▶</span>
-            <span style="font-weight:600;font-size:0.84rem;flex:1">${pname}</span>
-            <span class="qty-badge" style="background:#dcfce7;color:#16a34a;font-weight:800">${data.totalQty}</span>
+            <span style="font-weight:600;font-size:0.84rem">${pname}</span>
+            <span class="qty-badge">${data.totalQty}</span>
           </div>
           <div id="lrow_${lid}" style="display:none;padding:0 0 8px 28px">
             ${data.customers.map(c =>
               `<div style="display:flex;align-items:center;gap:12px;padding:3px 0;font-size:0.82rem">
                 <span style="color:#555;flex:1">${c.customer}</span>
-                <span style="background:#f1f5f9;color:#1e293b;padding:2px 8px;border-radius:10px;font-size:0.82rem;font-weight:600;white-space:nowrap">${c.qty}</span>
+                <span class="qty-badge">${c.qty}</span>
               </div>`
             ).join('')}
           </div>
