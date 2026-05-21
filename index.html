@@ -48,7 +48,7 @@
   .kpi-val   { font-size: 2rem; font-weight: 700; line-height: 1.1; }
   .kpi-label { font-size: 0.7rem; font-weight: 600; letter-spacing: .05em;
     text-transform: uppercase; color: #888; margin-top: 4px; }
-  .kpi-hint  { font-size: 0.65rem; color: #bbb; margin-top: 3px; }
+  .kpi-hint  { display: none; }
   /* KPI colors */
   .kpi-green  .kpi-val { color: #16a34a; }
   .kpi-orange .kpi-val { color: #ea580c; }
@@ -122,6 +122,13 @@
   .harvest-sub-label:first-child { margin-top: 0; }
   .harvest-sub-label.pending-lbl { color: #ea580c; }
   .harvest-sub-label.done-lbl    { color: #16a34a; }
+  /* Delivery section sub-labels: centered, larger */
+  .delivery-sub-label { font-size: 1rem; font-weight: 700; text-align: center;
+    letter-spacing: .04em; margin: 14px 0 8px; padding-bottom: 6px;
+    border-bottom: 2px solid #eef0f5; color: #555; }
+  .delivery-sub-label:first-child { margin-top: 0; }
+  .delivery-sub-label.upcoming-lbl { color: #ea580c; }
+  .delivery-sub-label.done-lbl     { color: #16a34a; }
 
   /* Date groups */
   .date-group { font-weight: 600; color: #aaa; font-size: 0.78rem;
@@ -219,6 +226,7 @@
       ✂️ Harvested Today
       <span class="sec-badge" id="badge-harvest"></span>
     </div>
+    <div id="harvest-tray-total" style="font-size:0.82rem;color:#1d4ed8;font-weight:600;margin-bottom:8px"></div>
     <div id="harvest-body"></div>
   </div>
 
@@ -577,14 +585,15 @@ function renderForDate(viewDate) {
   });
   const ozEntries = Object.entries(ozByVariety).sort((a,b) => a[0].localeCompare(b[0])); // A-Z
 
+  const totalHarvestTrays = allHarvestToday.reduce((sum, b) => sum + (parseInt(b.number_of_trays)||0), 0);
   const kpiDefs = [
-    { val: activeOrders.length,    label: 'Deliveries Today',    target: 'sec-stops',   cls: 'kpi-green'  },
-    { val: upcomingItems.length,   label: 'Items to Pack',        target: 'sec-packout', cls: 'kpi-orange' },
-    { val: allHarvestToday.length, label: 'Harvest Today',        target: 'sec-harvest', cls: 'kpi-blue'   },
-    { val: plantTraySum,           label: 'Trays to Plant',       target: 'sec-plant',   cls: 'kpi-blue'   },
-    { val: totalLabels,            label: 'Labels to Print',      target: 'sec-labels',  cls: 'kpi-orange' },
-    { val: ozEntries.length,       label: 'Allocation Details',   target: 'sec-oz',      cls: 'kpi-purple' },
-    { val: tmrOrders.length,       label: 'Deliveries Tomorrow',  target: 'sec-tomorrow',cls: 'kpi-purple' },
+    { val: activeOrders.length,    label: 'Deliveries Today',                                  target: 'sec-stops',   cls: 'kpi-green'  },
+    { val: upcomingItems.length,   label: 'Remaining Items to Pack Out for Today\'s Deliveries', target: 'sec-packout', cls: 'kpi-orange' },
+    { val: totalLabels,            label: 'Labels to Print',                                    target: 'sec-labels',  cls: 'kpi-orange' },
+    { val: allHarvestToday.length, label: 'Batches to Harvest Today for TMRO Orders',           target: 'sec-harvest', cls: 'kpi-blue'   },
+    { val: plantTraySum,           label: 'Trays to Plant',                                     target: 'sec-plant',   cls: 'kpi-blue'   },
+    { val: ozEntries.length,       label: 'Allocation Details',                                 target: 'sec-oz',      cls: 'kpi-purple' },
+    { val: tmrOrders.length,       label: 'Deliveries Tomorrow',                                target: 'sec-tomorrow',cls: 'kpi-purple' },
   ];
   document.getElementById('kpiBar').innerHTML = kpiDefs.map(k =>
     `<div class="kpi ${k.cls}${activeFilter===k.target?' active':''}"
@@ -693,7 +702,7 @@ function renderForDate(viewDate) {
       const groupId  = `${idPrefix}_${oi}`;
       const derivedStatus = deriveOrderStatus(ord.id, todayDetails, ord);
       st += `<tr style="cursor:pointer;background:#f0f4fb;font-weight:600" onclick="toggleStopRows('${groupId}')">
-        <td><span id="stopchev_${groupId}" style="color:#1a56cc;font-size:0.75rem;margin-right:5px">▼</span>${stopCell}</td>
+        <td><span id="stopchev_${groupId}" style="color:#1a56cc;font-size:0.75rem;margin-right:5px">▶</span>${stopCell}</td>
         <td style="color:#222">${ord.client_name}</td>
         <td></td><td></td>
         <td></td>
@@ -702,13 +711,13 @@ function renderForDate(viewDate) {
         <td>${invTxt}</td>
       </tr>`;
       if (!items.length) {
-        st += `<tr class="stoprows_${groupId}">
+        st += `<tr class="stoprows_${groupId}" style="display:none">
           <td></td><td colspan="6" class="empty" style="padding-left:16px">No items</td><td></td>
         </tr>`;
       } else {
         items.forEach(it => {
           const lt = parseFloat(it.total_price)||0;
-          st += `<tr class="stoprows_${groupId}">
+          st += `<tr class="stoprows_${groupId}" style="display:none">
             <td></td>
             <td style="padding-left:16px">${it.product_name||'—'}</td>
             <td>${itemStatusText(it.status)}</td>
@@ -727,15 +736,18 @@ function renderForDate(viewDate) {
     document.getElementById('stops-today-body').innerHTML = '<div class="empty">No deliveries for this date.</div>';
   } else {
     const stopsHtml =
-      `<div class="harvest-sub-label">⏳ Upcoming Deliveries (${upcomingStops.length})</div>` +
+      `<div class="delivery-sub-label upcoming-lbl">⏳ Upcoming Deliveries (${upcomingStops.length})</div>` +
       buildStopsTable(upcomingStops, 'upd') +
-      `<div class="harvest-sub-label" style="margin-top:14px">✅ Completed Deliveries (${completedStops.length})</div>` +
+      `<div class="delivery-sub-label done-lbl" style="margin-top:14px">✅ Completed Deliveries (${completedStops.length})</div>` +
       buildStopsTable(completedStops, 'cpd');
     document.getElementById('stops-today-body').innerHTML = stopsHtml;
   }
 
   // ── HARVEST TODAY (pending + completed, grouped by M1/M2) ──
   document.getElementById('badge-harvest').textContent = allHarvestToday.length;
+  // Show total trays across all harvest batches as a sub-note
+  document.getElementById('harvest-tray-total').textContent = totalHarvestTrays > 0
+    ? `${totalHarvestTrays} total trays across ${allHarvestToday.length} batch${allHarvestToday.length===1?'':'es'}` : '';
 
   function buildHarvestTable(batches) {
     if (!batches.length) return '<div class="empty" style="padding:8px 0">None</div>';
@@ -763,14 +775,25 @@ function renderForDate(viewDate) {
         const harvVal  = ov.trays !== undefined ? ov.trays : (parseInt(b.number_trays_harvested)||0);
         const yieldVal = ov.yield !== undefined ? ov.yield : (parseFloat(b.actual_yield||'') || '');
         const pct      = total > 0 ? Math.min(100, Math.round(harvVal/total*100)) : 0;
-        // Actual avg yield/tray: only show when both yield and trays are recorded
+        // Actual avg yield/tray: color+arrow vs expected
         const actualYieldNum = parseFloat(yieldVal) || 0;
-        const actualAvg = (actualYieldNum > 0 && harvVal > 0)
-          ? (actualYieldNum / harvVal).toFixed(1) + ' oz'
-          : '—';
-        // Expected avg yield/tray: from variety table avg_yield_per_tray field
         const v = varMap[b.variety];
-        const expectedAvg = v && v.avg_yield_per_tray ? v.avg_yield_per_tray + ' oz' : '—';
+        const expectedAvgNum = v && v.avg_yield_per_tray ? parseFloat(v.avg_yield_per_tray) : null;
+        const expectedAvg = expectedAvgNum !== null ? expectedAvgNum.toFixed(1) + ' oz' : '—';
+        let actualAvg = '—';
+        if (actualYieldNum > 0 && harvVal > 0) {
+          const aNum = actualYieldNum / harvVal;
+          if (expectedAvgNum !== null && expectedAvgNum > 0) {
+            const diffPct = Math.round((aNum - expectedAvgNum) / expectedAvgNum * 100);
+            const isHigh  = aNum >= expectedAvgNum;
+            const color   = isHigh ? '#16a34a' : '#dc2626';
+            const arrow   = isHigh ? '↑' : '↓';
+            const sign    = diffPct >= 0 ? '+' : '';
+            actualAvg = `<span style="color:${color};font-weight:700">${aNum.toFixed(1)} oz ${arrow} <span style="font-size:0.78rem">${sign}${diffPct}%</span></span>`;
+          } else {
+            actualAvg = `<span style="color:#1d4ed8;font-weight:600">${aNum.toFixed(1)} oz</span>`;
+          }
+        }
         html += `<tr>
           <td>${simplifyRack(b._rack_assignment)}</td>
           <td>${b.name||'—'}</td>
@@ -790,7 +813,7 @@ function renderForDate(viewDate) {
               <span class="yield-of">oz</span>
             </div>
           </td>
-          <td style="font-weight:600;color:#1d4ed8">${actualAvg}</td>
+          <td>${actualAvg}</td>
           <td style="color:#888">${expectedAvg}</td>
           <td><button class="save-btn" id="sbtn_${b.id}" onclick="saveHarvestRow('${b.id}')">Save</button></td>
         </tr>`;
@@ -961,7 +984,7 @@ function renderForDate(viewDate) {
         </tr>`;
       });
       return `<div class="tbl-wrap"><table>
-        <thead><tr><th>Batch</th><th>Trays</th><th>Optimal Unstack Date</th><th>Seed Density</th><th>Rack</th></tr></thead>
+        <thead><tr><th>Batch</th><th>Trays</th><th>Optimal Unstack Date</th><th>Seed Density (g)</th><th>Rack</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>`;
     }
@@ -1001,9 +1024,9 @@ function renderForDate(viewDate) {
       const stopTotal = items.reduce((s,it) => s + (parseFloat(it.total_price)||0), 0);
       const groupId = `tmr_${oi}`;
       const derivedTmrStatus = deriveOrderStatus(ord.id, tmrDetails, ord);
-      // Collapsible header row
+      // Collapsible header row — default collapsed
       t += `<tr style="cursor:pointer;background:#f0f4fb;font-weight:600" onclick="toggleStopRows('${groupId}')">
-        <td><span id="stopchev_${groupId}" style="color:#1a56cc;font-size:0.75rem;margin-right:5px">▼</span>${stopCell}</td>
+        <td><span id="stopchev_${groupId}" style="color:#1a56cc;font-size:0.75rem;margin-right:5px">▶</span>${stopCell}</td>
         <td style="color:#222">${ord.client_name}</td>
         <td></td><td></td>
         <td></td>
@@ -1012,13 +1035,13 @@ function renderForDate(viewDate) {
         <td>${invTxt}</td>
       </tr>`;
       if (!items.length) {
-        t += `<tr class="stoprows_${groupId}">
+        t += `<tr class="stoprows_${groupId}" style="display:none">
           <td></td><td colspan="6" class="empty" style="padding-left:16px">No items</td><td></td>
         </tr>`;
       } else {
         items.forEach(it => {
           const lt = parseFloat(it.total_price)||0;
-          t += `<tr class="stoprows_${groupId}">
+          t += `<tr class="stoprows_${groupId}" style="display:none">
             <td></td>
             <td style="padding-left:16px">${it.product_name||'—'}</td>
             <td>${itemStatusText(it.status)}</td>
@@ -1074,11 +1097,12 @@ async function loadData() {
     varietyAll.forEach(v => { varMap[v.id] = v; });
 
     // Build mix map: keyed by mix variety ID → array of { componentName, pct }
+    // API fields: variety_to_mix = the mix, variety = the component, percent = decimal (0.5 = 50%)
     const mixMap = {};
     varietyMixAll.forEach(m => {
-      const mixId  = m.variety || m.mix_variety;
-      const compId = m.component_variety || m.component || m.ingredient_variety;
-      const pct    = parseFloat(m.percentage || m.ratio || m.percent || 0);
+      const mixId  = m.variety_to_mix;
+      const compId = m.variety;
+      const pct    = Math.round(parseFloat(m.percent || 0) * 100);
       if (!mixId || !compId) return;
       if (!mixMap[mixId]) mixMap[mixId] = [];
       const compVar = varMap[compId];
