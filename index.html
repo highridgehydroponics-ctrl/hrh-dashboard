@@ -190,6 +190,18 @@
   .save-btn.err      { background: #dc2626; }
 
   /* Pack-out checkmark button */
+  /* Pack-out multi-select */
+  .pack-group-hdr { background: #f1f5f9; cursor: pointer; user-select: none; }
+  .pack-group-hdr:hover td { background: #e8edf5 !important; }
+  .pack-group-hdr td { padding: 6px 8px; font-size: 0.82rem; font-weight: 700; color: #334155; border-bottom: 1px solid #e2e8f0; }
+  .pack-item-row td { padding: 5px 8px; }
+  .pack-item-chk { width: 17px; height: 17px; cursor: pointer; accent-color: #1d4ed8; }
+  .pack-group-chk { width: 17px; height: 17px; cursor: pointer; accent-color: #1d4ed8; }
+  #packOutSaveBar { display:none; position:sticky; bottom:12px; z-index:50; text-align:center; pointer-events:none; }
+  #packOutSaveBar button { pointer-events:all; background:#1d4ed8; color:#fff; border:none; border-radius:10px; padding:9px 24px; font-size:0.9rem; font-weight:700; cursor:pointer; box-shadow:0 4px 14px rgba(29,78,216,.35); }
+  #packOutSaveBar button:hover { background:#1e40af; }
+  #packOutSaveBar button:disabled { background:#94a3b8; }
+
   .packout-chk { width: 26px; height: 26px; border-radius: 50%;
     border: 2px solid #cbd5e1; background: #fff; color: #94a3b8;
     cursor: pointer; font-size: 0.85rem; font-weight: 700;
@@ -273,6 +285,11 @@
       <span class="sec-sub" id="packout-sub"></span>
     </div>
     <div id="packout-body"></div>
+    <div id="packOutSaveBar">
+      <button id="packOutSaveBtn" onclick="savePackOutSelections()">
+        📦 Mark Selected as Packed Out (<span id="packOutCount">0</span>)
+      </button>
+    </div>
   </div>
 
   <div class="section" id="sec-stops">
@@ -388,6 +405,95 @@ function packOutChkBtn(detailId, currentStatus) {
   return `<button class="packout-chk${queued?' queued':''}" data-id="${detailId}"
     onclick="togglePackOut('${detailId}','${(currentStatus||'').replace(/'/g,'')}')"
     title="${queued?'Queued — click Save to apply':'Mark as Packed Out'}">${queued?'✓':'○'}</button>`;
+}
+
+// ── Pack-out multi-select ──────────────────────────────────────────
+function selectPackGroup(gid, forceState) {
+  const itemRows = document.querySelectorAll(`.pack-item-row[data-gid="${gid}"]`);
+  const itemChks = document.querySelectorAll(`.pack-item-chk[data-gid="${gid}"]`);
+  const hdrChk   = document.getElementById(gid + '_hchk');
+  const chev     = document.getElementById(gid + '_chev');
+
+  // Toggle collapse/expand if no forceState (bare row click)
+  const isExpanded = itemRows.length > 0 && itemRows[0].style.display !== 'none';
+  if (forceState === undefined) {
+    const newVisible = !isExpanded;
+    itemRows.forEach(r => r.style.display = newVisible ? '' : 'none');
+    if (chev) chev.textContent = newVisible ? '▼' : '▶';
+    return; // don't change checkboxes on bare expand/collapse
+  }
+
+  // Explicit check state — also expand the group
+  itemRows.forEach(r => r.style.display = '');
+  if (chev) chev.textContent = '▼';
+
+  itemChks.forEach(chk => {
+    if (!chk.disabled) {
+      chk.checked = forceState;
+      const id = chk.dataset.id;
+      if (forceState) { __pendingPackOuts[id] = true; }
+      else            { delete __pendingPackOuts[id]; }
+    }
+  });
+  if (hdrChk) hdrChk.checked = forceState;
+  refreshPackOutBar();
+}
+
+function onPackItemChange(detailId, gid, chk) {
+  if (chk.checked) { __pendingPackOuts[detailId] = true; }
+  else             { delete __pendingPackOuts[detailId]; }
+
+  // Sync group header checkbox indeterminate state
+  const groupChks = [...document.querySelectorAll(`.pack-item-chk[data-gid="${gid}"]`)];
+  const hdrChk    = document.getElementById(gid + '_hchk');
+  if (hdrChk) {
+    const all  = groupChks.every(c => c.checked);
+    const some = groupChks.some(c => c.checked);
+    hdrChk.checked       = all;
+    hdrChk.indeterminate = some && !all;
+  }
+  refreshPackOutBar();
+}
+
+function refreshPackOutBar() {
+  const n   = Object.keys(__pendingPackOuts).length;
+  const bar = document.getElementById('packOutSaveBar');
+  const cnt = document.getElementById('packOutCount');
+  if (bar) bar.style.display = n > 0 ? 'block' : 'none';
+  if (cnt) cnt.textContent = n;
+  updateSaveBadge(); // keep the global floating save badge in sync too
+}
+
+async function savePackOutSelections() {
+  const detailIds = Object.keys(__pendingPackOuts);
+  if (!detailIds.length) return;
+  const btn = document.getElementById('packOutSaveBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Saving…'; }
+  try {
+    const rows = detailIds.map(id => ({ id, status: 'Packed Out' }));
+    const r = await fetch(
+      `https://api.appsheet.com/api/v2/apps/${ORDERS.appId}/tables/order_detail/Action`,
+      { method:'POST', cache:'no-store',
+        headers:{ 'ApplicationAccessKey': ORDERS.apiKey, 'Content-Type':'application/json' },
+        body: JSON.stringify({ Action:'Edit', Properties:{}, Rows: rows }) }
+    );
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    // Mark rows as packed in UI
+    detailIds.forEach(id => {
+      delete __pendingPackOuts[id];
+      document.querySelectorAll(`.pack-item-chk[data-id="${id}"]`).forEach(chk => {
+        const td = chk.parentElement;
+        if (td) td.innerHTML = '<span style="color:#16a34a;font-size:1rem">✓</span>';
+        const row = chk.closest?.('tr');
+        if (row) row.style.opacity = '0.5';
+      });
+    });
+    refreshPackOutBar();
+    if (btn) { btn.disabled = false; btn.innerHTML = '📦 Mark Selected as Packed Out (<span id="packOutCount">0</span>)'; }
+  } catch(e) {
+    alert('Save failed: ' + e.message);
+    if (btn) { btn.disabled = false; btn.innerHTML = '📦 Mark Selected as Packed Out (<span id="packOutCount">' + detailIds.length + '</span>)'; }
+  }
 }
 
 function togglePackOut(detailId, currentStatus) {
@@ -1006,48 +1112,93 @@ function renderForDate(viewDate) {
     (parseInt(a.stop_number)||9999) - (parseInt(b.stop_number)||9999)
   );
 
-  const buildPackRows = (orders, details, isCancelled) => {
+  // ── Build cancelled rows (old format, no checkboxes) ──
+  const buildCancelRows = (orders, details) => {
     let rows = '';
     orders.forEach(ord => {
-      const prefs   = clientPrefs[ord.client_name] || {};
-      const invTxt  = prefs.bring_invoice === 'Y'
-        ? '<span class="inv-yes">Yes</span>' : '<span class="inv-no">No</span>';
-      const stopCell = ord.stop_number ? `<span class="stop-num">${ord.stop_number}</span>` : '—';
-      // For pack-out: only show upcoming items per order
-      const items = isCancelled
-        ? details.filter(d => d.order === ord.id)
-        : details.filter(d => d.order === ord.id && (d.status||'').toLowerCase().includes('upcoming'));
-      const rowCls = isCancelled ? ' class="row-cancelled"' : '';
-      if (!items.length) return; // skip orders with no matching items
-      let stopTotal = 0;
-      items.forEach((it, i) => {
-        const lineTotal = parseFloat(it.total_price)||0;
-        stopTotal += lineTotal;
-        rows += `<tr${rowCls}>
+      const items = details.filter(d => d.order === ord.id);
+      if (!items.length) return;
+      items.forEach(it => {
+        rows += `<tr class="row-cancelled">
           <td>${it.product_name||'—'}</td>
           <td><span class="qty-badge">${it.quantity_boxes||0}</span></td>
           <td class="customer-col">${ord.client_name}</td>
           <td>${itemStatusText(it.status)}</td>
-          <td style="width:36px;text-align:center">${isCancelled?'':packOutChkBtn(it.id, it.status)}</td>
         </tr>`;
       });
     });
     return rows;
   };
 
-  const activeRows = buildPackRows(sortedOrders, todayDetails, false);
+  // ── Build active rows grouped by product, with checkboxes ──
+  const buildPackRows = (items) => {
+    // Group by product_name A-Z
+    const byProd = {};
+    items.forEach(it => {
+      const pname = it.product_name || '—';
+      if (!byProd[pname]) byProd[pname] = [];
+      byProd[pname].push(it);
+    });
+    let rows = '';
+    Object.entries(byProd).sort(([a],[b]) => a.localeCompare(b)).forEach(([pname, pitems]) => {
+      const gid      = 'pkg_' + pname.replace(/\W+/g,'_');
+      const totalQty = pitems.reduce((s,it) => s + (parseInt(it.quantity_boxes)||0), 0);
+      const allIds   = pitems.filter(it => !(it.status||'').toLowerCase().includes('packed'))
+                             .map(it => it.id);
+      // Group header row — click anywhere to toggle-all
+      rows += `<tr class="pack-group-hdr" onclick="selectPackGroup('${gid}')">
+        <td colspan="3">
+          <span id="${gid}_chev" style="font-size:0.72rem;margin-right:6px;color:#1a56cc">▶</span>
+          ${pname}
+          <span class="qty-badge" style="margin-left:6px">${totalQty}</span>
+        </td>
+        <td style="text-align:right;padding-right:6px;color:#64748b;font-size:0.75rem">${pitems.length} order${pitems.length>1?'s':''}</td>
+        <td style="text-align:center;width:36px" onclick="event.stopPropagation()">
+          <input type="checkbox" class="pack-group-chk" id="${gid}_hchk"
+            data-gid="${gid}"
+            onchange="selectPackGroup('${gid}',this.checked)">
+        </td>
+      </tr>`;
+      // Item rows (collapsed by default, shown on group click)
+      pitems.forEach(it => {
+        const ord       = orderMap[it.order] || {};
+        const customer  = it.client_name || ord.client_name || '—';
+        const isPacked  = (it.status||'').toLowerCase().includes('packed');
+        rows += `<tr class="pack-item-row" data-gid="${gid}" style="display:none">
+          <td style="padding-left:22px;color:#555;font-size:0.82rem">${pname}</td>
+          <td><span class="qty-badge">${it.quantity_boxes||0}</span></td>
+          <td class="customer-col">${customer}</td>
+          <td>${itemStatusText(it.status)}</td>
+          <td style="text-align:center;width:36px">
+            ${isPacked
+              ? '<span style="color:#16a34a;font-size:1rem">✓</span>'
+              : `<input type="checkbox" class="pack-item-chk" data-id="${it.id}" data-gid="${gid}"
+                   onchange="onPackItemChange('${it.id}','${gid}',this)">`}
+          </td>
+        </tr>`;
+      });
+    });
+    return rows;
+  };
+
+  const activeRows = buildPackRows(upcomingItems);
   let packHtml = '';
   if (!activeRows) {
     packHtml = '<div class="empty">No upcoming items to pack for this date.</div>';
   } else {
     packHtml = `<div class="tbl-wrap"><table>
       <thead><tr>
-        <th>Product</th><th>Total Qty</th><th>Customer</th><th>Status</th><th style="width:36px"></th>
+        <th>Product</th><th>Qty</th><th>Customer</th><th>Status</th>
+        <th style="width:36px;text-align:center">
+          <input type="checkbox" class="pack-group-chk" id="packSelectAll"
+            title="Select all"
+            onchange="document.querySelectorAll('.pack-group-chk:not(#packSelectAll)').forEach(c=>{c.checked=this.checked;selectPackGroup(c.dataset.gid,this.checked)})">
+        </th>
       </tr></thead>
       <tbody>${activeRows}</tbody>
     </table></div>`;
     if (cancelledOrders.length) {
-      const cancelRows = buildPackRows(cancelledOrders, todayDetails, true);
+      const cancelRows = buildCancelRows(cancelledOrders, todayDetails);
       if (cancelRows) {
         packHtml += `<div class="cancelled-section">
           <button class="cancelled-toggle" onclick="toggleCancelled()">
