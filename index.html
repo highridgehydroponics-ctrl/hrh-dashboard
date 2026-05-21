@@ -373,13 +373,8 @@ async function appFetch(creds, table) {
   const r = await fetch(url, {
     method: 'POST',
     cache: 'no-store',
-    headers: {
-      'ApplicationAccessKey': creds.apiKey,
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-cache, no-store',
-      'Pragma': 'no-cache'
-    },
-    body: JSON.stringify({ Action: 'Find', Properties: { Locale: 'en-US', Timezone: 'America/New_York', RunAsUserEmail: '' }, Rows: [] })
+    headers: { 'ApplicationAccessKey': creds.apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ Action: 'Find', Properties: {}, Rows: [] })
   });
   if (!r.ok) throw new Error(`AppSheet error on "${table}": ${r.status}`);
   const t = await r.text();
