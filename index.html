@@ -679,7 +679,7 @@ async function saveLabelsPrinted() {
     const body = {
       Action: 'Edit',
       Properties: {},
-      Rows: allIds.map(id => ({ id, 'labels_printed?': 'Printed' }))
+      Rows: allIds.map(id => ({ id, 'labels_printed?': 'Y' }))
     };
     const r = await fetch(url, {
       method: 'POST',
@@ -991,6 +991,8 @@ function renderForDate(viewDate) {
           delivTime:   ord.delivery_time_actual || '—'
         });
       });
+      // Sort stops by stop number
+      route.stops.sort((a,b) => (parseInt(a.stopNumber)||9999) - (parseInt(b.stopNumber)||9999));
       todayRoutes.push(route);
     });
     // Sort routes earliest start time first
