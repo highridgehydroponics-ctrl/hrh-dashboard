@@ -299,6 +299,9 @@
       <button class="draft-inv-btn" id="draftInvBtn" onclick="copyDraftInvoices()" title="Copies the command to your clipboard — paste into Claude to run">
         📄 Draft Square Invoices
       </button>
+      <a href="file:///Users/joealvarez/Documents/Claude/Projects/Create%20Routes/" target="_blank" class="draft-inv-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+        🗺️ Route Dashboard
+      </a>
     </div>
     <div id="stops-today-body"></div>
   </div>
@@ -307,6 +310,9 @@
     <div class="section-title">
       ✂️ Harvested Today
       <span class="sec-badge" id="badge-harvest"></span>
+      <button class="draft-inv-btn" id="markHarvestedBtn" onclick="markAllHarvested()" style="background:#16a34a;color:#fff;border-color:#15803d">
+        ✅ Mark All Harvested
+      </button>
     </div>
     <div id="harvest-tray-total" style="font-size:0.82rem;color:#1d4ed8;font-weight:600;margin-bottom:8px"></div>
     <div id="harvest-body"></div>
@@ -355,6 +361,9 @@
     <div class="section-title">
       📋 Tomorrow's Deliveries
       <span class="sec-badge" id="badge-tmr"></span>
+      <a href="file:///Users/joealvarez/Documents/Claude/Projects/Create%20Routes/" target="_blank" class="draft-inv-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+        🗺️ Route Dashboard
+      </a>
     </div>
     <div id="tomorrow-body"></div>
   </div>
@@ -747,6 +756,50 @@ function setAllocDate(val) {
   if (__store) renderForDate(__viewDate);
 }
 
+async function markAllHarvested() {
+  const btn = document.getElementById('markHarvestedBtn');
+  // Find all today's harvest batches with status_name containing "being harvested"
+  const { batchAll } = __store;
+  const todayStr = new Date().toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'});
+  const beingHarvested = batchAll.filter(b =>
+    (b.optimal_harvest_date||'').trim() === todayStr &&
+    (b.status_name||'').toLowerCase().includes('being harvested')
+  );
+  if (!beingHarvested.length) {
+    alert('No batches currently in "Being Harvested" status for today.');
+    return;
+  }
+  if (!confirm(`Mark ${beingHarvested.length} batch${beingHarvested.length===1?'':'es'} as Harvested?`)) return;
+  btn.disabled = true;
+  btn.textContent = '⏳ Saving...';
+  try {
+    // Fetch batch_status from GR to find the "Harvested" status ID
+    const statusRows = await appFetch(GR, 'batch_status');
+    const harvestedStatus = statusRows.find(s =>
+      (s.name||'').toLowerCase() === 'harvested' ||
+      (s.id||'').toLowerCase() === 'harvested'
+    );
+    if (!harvestedStatus) throw new Error('Could not find "Harvested" status in batch_status table.');
+    const statusId = harvestedStatus.id;
+    // Update all "Being Harvested" batches to "Harvested"
+    const rows = beingHarvested.map(b => ({ id: b.id, status: statusId }));
+    const r = await fetch(
+      `https://api.appsheet.com/api/v2/apps/${GC.appId}/tables/batch/Action`,
+      { method:'POST', cache:'no-store',
+        headers:{ 'ApplicationAccessKey': GC.apiKey, 'Content-Type':'application/json' },
+        body: JSON.stringify({ Action:'Edit', Properties:{}, Rows: rows }) }
+    );
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    btn.textContent = `✅ ${beingHarvested.length} Marked Harvested`;
+    btn.style.background = '#15803d';
+    setTimeout(() => loadData(), 3000); // refresh data
+  } catch(e) {
+    alert('⚠️ Failed to mark harvested: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = '✅ Mark All Harvested';
+  }
+}
+
 async function saveHarvestRow(batchId) {
   const btn = document.getElementById('sbtn_' + batchId);
   const ov  = __harvestOverrides[batchId] || {};
@@ -988,7 +1041,7 @@ function renderForDate(viewDate) {
           invoiceSent: ord['invoice_sent?'] || '',
           orderStatus: deriveOrderStatus(di.order, todayDetails, ord),
           delivStatus: di.status || '—',
-          delivTime:   ord.delivery_time_actual || '—'
+          delivTime:   fmtTime12((ord.delivery_time_actual||'').slice(0,5)) || '—'
         });
       });
       // Sort stops by stop number
