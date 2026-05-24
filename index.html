@@ -242,6 +242,10 @@
 </style>
 </head>
 <body>
+<div id="fileid-banner" style="position:fixed;top:0;left:0;right:0;background:#dc2626;color:#fff;text-align:center;font:bold 14px sans-serif;padding:6px;z-index:99999">
+  ✅ CORRECT FILE LOADED (v2) — tap to dismiss
+</div>
+<script>document.getElementById('fileid-banner').onclick=function(){this.remove();};</script>
 
 <div id="draft-inv-toast" class="draft-inv-toast">📋 Copied! Paste into Claude to run Draft Invoices</div>
 <div id="loading">⏳ Loading fresh data from AppSheet…</div>
