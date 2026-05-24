@@ -1114,7 +1114,7 @@ function renderForDate(viewDate) {
   const plantTraySum = nonLettuceNonMixForKpi.reduce((sum, b) => sum + (parseInt(b.number_of_trays)||0), 0);
   // Build oz-by-variety map — single day, includes mixes (not lettuce), sorted A-Z
   // Live tray products are excluded from oz totals
-  const ozDate = __allocDate || todayStr;
+  const ozDate = __allocDate || tmrStr;
   const ozDayDetails = detailAll.filter(d => d.fulfillment_date === ozDate);
   const ozByVariety = {};
   ozDayDetails.forEach(d => {
@@ -1627,15 +1627,30 @@ function renderForDate(viewDate) {
     document.getElementById('oz-body').innerHTML = '<div class="empty">No allocation data for this date.</div>';
   } else {
     let oz = `<div class="tbl-wrap"><table>
-      <thead><tr><th style="width:30px"></th><th>Variety</th><th>Total Oz</th></tr></thead><tbody>`;
+      <thead><tr><th style="width:30px"></th><th>Variety</th><th style="color:#6b7280;font-size:0.78rem">Batch</th><th style="color:#6b7280;font-size:0.78rem">Rack</th><th>Total Oz</th></tr></thead><tbody>`;
+    // Compute harvest date = day before ozDate
+    const [_ozM,_ozD,_ozY] = ozDate.split('/');
+    const harvestDateStr = fmt(addDays(new Date(parseInt(_ozY),parseInt(_ozM)-1,parseInt(_ozD)),-1));
     ozEntries.forEach(([name, data], idx) => {
       const rowId = 'ozrow_' + idx;
       const isMix = data.varietyId && varMap[data.varietyId] && varMap[data.varietyId]['mix?'] === 'Y';
       const mixComponents = (data.varietyId && mixMap && mixMap[data.varietyId]) ? mixMap[data.varietyId] : null;
       const mixBadge = isMix ? `<span style="font-size:0.68rem;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px;margin-left:6px;font-weight:600">MIX</span>` : '';
+      const matchBatches = batchAll.filter(b =>
+        b.variety === data.varietyId &&
+        normDate(b.optimal_harvest_date||'') === harvestDateStr
+      );
+      const batchDisplay = matchBatches.length
+        ? matchBatches.map(b => b.name||'—').join('<br>')
+        : '<span style="color:#bbb">—</span>';
+      const rackDisplay = matchBatches.length
+        ? matchBatches.map(b => simplifyRack(b._rack_assignment||b.rack||'')).filter(Boolean).join(', ')
+        : '<span style="color:#bbb">—</span>';
       oz += `<tr style="cursor:pointer" onclick="toggleOzRow('${rowId}')">
         <td><span id="chev_${rowId}" style="color:#1a56cc;font-size:0.8rem">▶</span></td>
         <td style="font-weight:600">${name}${mixBadge}</td>
+        <td style="font-size:0.8rem;color:#374151">${batchDisplay}</td>
+        <td style="font-size:0.8rem;color:#374151">${rackDisplay}</td>
         <td class="oz-total">${data.total} oz</td>
       </tr>
       <tr id="${rowId}" style="display:none">
