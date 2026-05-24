@@ -1987,6 +1987,14 @@ async function loadData() {
     }
 
     __store = { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap, mixMap, deliveryByOrder, delivItemAll, deliveryAll, vehicleMap };
+    // ── DELIVERY DEBUG ──
+    console.log('[HRH] deliveryAll records:', deliveryAll ? deliveryAll.length : 'null');
+    console.log('[HRH] delivItemAll records:', delivItemAll ? delivItemAll.length : 'null');
+    if (deliveryAll && deliveryAll.length) {
+      deliveryAll.forEach((d,i) => console.log(`[HRH] delivery[${i}]:`, JSON.stringify({id:d.id, scheduled_date:d.scheduled_date, status:d.status, orders:d.orders})));
+    } else {
+      console.log('[HRH] No delivery records returned from API');
+    }
 
     document.getElementById('loading').style.display = 'none';
     document.getElementById('content').style.display  = 'block';
@@ -1995,6 +2003,7 @@ async function loadData() {
     renderForDate(__viewDate);
 
   } catch(err) {
+    console.error('[HRH] Fetch failed:', err.message, err);
     if (__store) {
       // have cached data — show warning and re-render with what we have
       document.getElementById('warnBadge').style.display = 'inline-block';
