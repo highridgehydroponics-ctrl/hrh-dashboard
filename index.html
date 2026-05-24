@@ -888,6 +888,12 @@ function isToday(d) {
 
 function shiftDate(n) { __viewDate = addDays(__viewDate, n); renderForDate(__viewDate); }
 function goToday()    { __viewDate = new Date(); renderForDate(__viewDate); }
+function updateTodayBtn() {
+  const btn = document.getElementById('todayBtn');
+  if (!btn) return;
+  const t = new Date();
+  btn.textContent = '→ Today (' + t.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) + ')';
+}
 
 // ── DERIVE ORDER STATUS (bypasses AppSheet order-table cache lag) ──
 // Priority:
@@ -1011,6 +1017,7 @@ function renderForDate(viewDate) {
   if (bigDateEl) bigDateEl.textContent = viewDate.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
   document.getElementById('dateDisplay').textContent  = fmtLong(viewDate);
   document.getElementById('todayBtn').style.display   = isToday(viewDate) ? 'none' : 'inline-block';
+  updateTodayBtn();
 
   // Filter data
   const todayOrders  = ordersAll.filter(o => o.fulfillment_date === todayStr);
@@ -1633,7 +1640,7 @@ function renderForDate(viewDate) {
       </tr>
       <tr id="${rowId}" style="display:none">
         <td colspan="3" style="padding:0 0 8px 24px;background:#f8f9fc">
-          <table style="width:100%;font-size:0.8rem;margin-top:6px">
+          <table style="width:auto;font-size:0.8rem;margin-top:6px;border-collapse:collapse">
             <thead><tr>
               <th style="color:#aaa;font-weight:600;padding:2px 4px">Product</th>
               <th style="color:#aaa;font-weight:600;padding:2px 4px">Customer</th>
