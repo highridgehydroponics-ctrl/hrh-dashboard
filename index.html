@@ -1076,19 +1076,6 @@ function renderForDate(viewDate) {
 
   }
 
-  // ── TEMP DEBUG PANEL (always shown) ──
-  {
-    let dbgEl = document.getElementById('_debugPanel');
-    if (!dbgEl) { dbgEl = document.createElement('div'); dbgEl.id='_debugPanel'; dbgEl.style.cssText='position:fixed;bottom:8px;left:8px;background:#1e293b;color:#e2e8f0;font:12px monospace;padding:10px 14px;border-radius:8px;z-index:9999;max-width:620px;white-space:pre-wrap;box-shadow:0 4px 16px rgba(0,0,0,0.4)'; document.body.appendChild(dbgEl); }
-    const delivArr = Array.isArray(deliveryAll) ? deliveryAll : [];
-    const delivItemArr = Array.isArray(delivItemAll) ? delivItemAll : [];
-    const delivSample = delivArr.length
-      ? delivArr.slice(0,3).map(d=>`  scheduled_date="${d.scheduled_date}"  id="${d.id}"  status="${d.status}"`).join('\n')
-      : '  (no records returned)';
-    dbgEl.textContent = `🔍 DEBUG — tap to dismiss\ntodayStr       = "${todayStr}"\ndeliveryAll    = ${delivArr.length} records\ndelivItemAll   = ${delivItemArr.length} records\ntodayRoutes    = ${todayRoutes.length} matched\n\nDelivery records:\n${delivSample}`;
-    dbgEl.onclick = () => dbgEl.remove();
-  }
-
   // ── KPI BAR ──
   const totalLabels = labelsToday.length + labelsTmr.length;
   // Microgreen-only filter (no lettuce, no mixes)
@@ -2029,41 +2016,6 @@ async function loadData() {
 }
 
 loadData();
-</script>
-<div id="_staticDbg" style="position:fixed;bottom:8px;left:8px;background:#7c3aed;color:#fff;font:13px monospace;padding:10px 16px;border-radius:8px;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.5)">
-  ⚠️ DEBUG LOADED — waiting for data...
-</div>
-<script>
-window.addEventListener('load', function() {
-  var el = document.getElementById('_staticDbg');
-  var MAX_WAIT = 20000; var start = Date.now();
-  function check() {
-    if (!window.__store) {
-      if (Date.now()-start < MAX_WAIT) { setTimeout(check, 500); return; }
-      el.textContent = '❌ __store never set (data load failed?)'; return;
-    }
-    var da = window.__store.deliveryAll;
-    var di = window.__store.delivItemAll;
-    var daArr = Array.isArray(da) ? da : [];
-    var diArr = Array.isArray(di) ? di : [];
-    var sample = daArr.length
-      ? daArr.slice(0,3).map(function(d){ return '  scheduled_date="'+d.scheduled_date+'" id="'+d.id+'"'; }).join('
-')
-      : '  (no delivery records)';
-    var todayStr = (function(){var d=new Date();var m=String(d.getMonth()+1).padStart(2,'0');var dd=String(d.getDate()).padStart(2,'0');return m+'/'+dd+'/'+d.getFullYear();})();
-    el.style.whiteSpace='pre-wrap';
-    el.style.maxWidth='640px';
-    el.textContent = '🔍 DEBUG (tap to close)
-todayStr    = "'+todayStr+'"
-deliveryAll = '+daArr.length+' records
-delivItemAll= '+diArr.length+' records
-
-Delivery records:
-'+sample;
-    el.onclick = function(){ el.remove(); };
-  }
-  setTimeout(check, 2000);
-});
 </script>
 </body>
 </html>
