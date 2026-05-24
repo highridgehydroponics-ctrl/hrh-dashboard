@@ -686,7 +686,7 @@ async function toggleAllLabels(checked) {
   document.getElementById('printQueueBtn').style.display = anyChecked ? 'inline-block' : 'none';
   document.getElementById('saveLabelStatus').textContent = '';
 }
-function saveLabelsPrinted() {
+async function saveLabelsPrinted() {
   const btn    = document.getElementById('saveLabelBtn');
   const status = document.getElementById('saveLabelStatus');
   const checked = [...document.querySelectorAll('.lbl-chk:checked')];
