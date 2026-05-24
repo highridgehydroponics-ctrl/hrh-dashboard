@@ -320,7 +320,7 @@
 
   <div class="section" id="sec-labels">
     <div class="section-title">
-      🏷️ Labels to Print
+      Labels to Print
       <span class="sec-badge" id="badge-labels"></span>
     </div>
     <div style="margin-bottom:10px">
@@ -333,6 +333,12 @@
         🖨️ Queue for Printing in Cowork
       </button>
       <span id="saveLabelStatus" style="font-size:0.8rem;color:#16a34a;margin-left:10px"></span>
+    </div>
+    <div id="labels-col-header" style="display:none;align-items:center;gap:8px;padding:4px 4px 6px;border-bottom:2px solid #e2e8f0;font-size:0.72rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">
+      <input type="checkbox" id="lblSelectAll" style="width:16px;height:16px;cursor:pointer;accent-color:#16a34a;flex-shrink:0" title="Select all" onchange="toggleAllLabels(this.checked)">
+      <span style="width:16px;flex-shrink:0"></span>
+      <span style="flex:1">Product Name</span>
+      <span style="padding-right:4px">QTY</span>
     </div>
     <div id="labels-body"></div>
   </div>
@@ -673,7 +679,14 @@ function copyPrintPrompt() {
   });
 }
 
-async function saveLabelsPrinted() {
+async function toggleAllLabels(checked) {
+  document.querySelectorAll('.lbl-chk').forEach(chk => { chk.checked = checked; });
+  const anyChecked = checked && document.querySelectorAll('.lbl-chk').length > 0;
+  document.getElementById('saveLabelBtn').style.display = anyChecked ? 'inline-block' : 'none';
+  document.getElementById('printQueueBtn').style.display = anyChecked ? 'inline-block' : 'none';
+  document.getElementById('saveLabelStatus').textContent = '';
+}
+function saveLabelsPrinted() {
   const btn    = document.getElementById('saveLabelBtn');
   const status = document.getElementById('saveLabelStatus');
   const checked = [...document.querySelectorAll('.lbl-chk:checked')];
@@ -1535,7 +1548,7 @@ function renderForDate(viewDate) {
         if (l.id) byProduct[key].ids.push(String(l.id));
       });
       const sortedProducts = Object.keys(byProduct).sort();
-      lHtml += `<div class="date-group">${ds}</div>`;
+      lHtml += `<div class="date-group">Fulfillment date ${ds}</div>`;
       sortedProducts.forEach((pname, idx) => {
         const data = byProduct[pname];
         const lid = `${ds.replace(/\//g,'')}_${idx}`;
@@ -1562,6 +1575,8 @@ function renderForDate(viewDate) {
       });
     });
     document.getElementById('labels-body').innerHTML = lHtml;
+    const colHdr = document.getElementById('labels-col-header');
+    if (colHdr) colHdr.style.display = 'flex';
     // Show save button when any checkbox is ticked
     document.querySelectorAll('.lbl-chk').forEach(chk => {
       chk.addEventListener('change', () => {
@@ -1635,9 +1650,9 @@ function renderForDate(viewDate) {
           <table style="width:100%;font-size:0.8rem;margin-top:6px">
             <thead><tr>
               <th style="color:#aaa;font-weight:600;padding:2px 4px">Product</th>
-              <th style="color:#aaa;font-weight:600;padding:2px 4px">Qty</th>
-              <th style="color:#aaa;font-weight:600;padding:2px 4px">Oz</th>
               <th style="color:#aaa;font-weight:600;padding:2px 4px">Customer</th>
+              <th style="color:#aaa;font-weight:600;padding:2px 4px">Qty</th>
+              <th style="color:#aaa;font-weight:600;padding:2px 4px">Total OZ</th>
             </tr></thead>
             <tbody>`;
       // Separate direct vs mix-sourced items
@@ -1655,9 +1670,9 @@ function renderForDate(viewDate) {
         sortedCust.forEach((it, ci) => {
           oz += `<tr>
             <td style="padding:2px 4px;color:#444;font-weight:${ci===0?'600':'400'}">${ci===0?prod:''}</td>
+            <td style="padding:2px 4px;color:#555">${it.customer}</td>
             <td style="padding:2px 4px;font-weight:600;color:#ea580c">${it.qty}</td>
             <td style="padding:2px 4px;font-weight:600;color:#ea580c">${it.oz} oz</td>
-            <td style="padding:2px 4px;color:#555">${it.customer}</td>
           </tr>`;
         });
       });
@@ -1672,9 +1687,9 @@ function renderForDate(viewDate) {
       Object.entries(byMix).sort(([a],[b]) => a.localeCompare(b)).forEach(([mn, totalOz]) => {
         oz += `<tr style="background:#fefce8">
           <td style="padding:2px 4px;color:#92400e;font-weight:600">${mn} <span style="font-size:0.68rem;background:#fef3c7;color:#92400e;border-radius:3px;padding:0 3px">mix</span></td>
+          <td style="padding:2px 4px;color:#aaa;font-size:0.75rem;font-style:italic">combined</td>
           <td style="padding:2px 4px;font-weight:600;color:#ea580c">1</td>
           <td style="padding:2px 4px;font-weight:600;color:#ea580c">${totalOz} oz</td>
-          <td style="padding:2px 4px;color:#aaa;font-size:0.75rem;font-style:italic">combined</td>
         </tr>`;
       });
       // Mix recipe breakdown
