@@ -883,8 +883,7 @@ function timeToMins(t) {
   return (h||0)*60 + (m||0);
 }
 function isToday(d) {
-  const t = new Date();
-  return d.getFullYear()===t.getFullYear() && d.getMonth()===t.getMonth() && d.getDate()===t.getDate();
+  return fmt(d) === fmt(new Date());
 }
 
 function shiftDate(n) { __viewDate = addDays(__viewDate, n); renderForDate(__viewDate); }
