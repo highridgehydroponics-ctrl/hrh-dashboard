@@ -736,6 +736,14 @@ function togglePlantDetail(id) {
   if (chev) chev.textContent = isOpen ? '▶' : '▼';
 }
 
+function toggleHarvestAlloc(id) {
+  const row = document.getElementById(id);
+  const chev = document.getElementById(id + '_chev');
+  if (!row) return;
+  const open = row.style.display !== 'none';
+  row.style.display = open ? 'none' : 'table-row';
+  if (chev) chev.textContent = open ? '▶' : '▼';
+}
 function toggleOzRow(id) {
   const el = document.getElementById(id);
   const chev = document.getElementById('chev_' + id);
@@ -1479,12 +1487,44 @@ function renderForDate(viewDate) {
             actualAvg = `<span style="color:#1d4ed8;font-weight:600">${aNum.toFixed(1)} oz</span>`;
           }
         }
-        html += `<tr>
+        // Build allocation details for this batch (tomorrow's orders for this variety)
+        const _allocId = 'halloc_' + b.id;
+        const _directAlloc = detailAll.filter(d =>
+          d.fulfillment_date === tmrStr &&
+          d.variety === b.variety &&
+          !(d.product_name||'').toLowerCase().includes('live')
+        );
+        const _mixAlloc = detailAll.filter(d =>
+          d.fulfillment_date === tmrStr &&
+          !(d.product_name||'').toLowerCase().includes('live') &&
+          mixMap[d.variety] && mixMap[d.variety].some(comp => comp.componentId === b.variety)
+        );
+        const _allAlloc = [..._directAlloc, ..._mixAlloc];
+        const _allocBadge = _allAlloc.length
+          ? `<span style="font-size:0.68rem;background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:1px 5px;margin-left:5px;font-weight:600">${_allAlloc.length} order${_allAlloc.length>1?'s':''}</span>`
+          : '';
+        const _allocTable = _allAlloc.length ? `
+          <table style="width:auto;font-size:0.78rem;border-collapse:collapse;margin-top:4px">
+            <thead><tr>
+              <th style="color:#9ca3af;font-weight:600;padding:2px 12px 4px 0">Product</th>
+              <th style="color:#9ca3af;font-weight:600;padding:2px 12px 4px 0">Customer</th>
+              <th style="color:#9ca3af;font-weight:600;padding:2px 12px 4px 0">Qty</th>
+              <th style="color:#9ca3af;font-weight:600;padding:2px 0 4px 0">Total OZ</th>
+            </tr></thead>
+            <tbody>${_allAlloc.map(d => `<tr>
+              <td style="padding:2px 12px 2px 0;font-weight:600;color:#1e293b">${d.product_name||'—'}</td>
+              <td style="padding:2px 12px 2px 0;color:#555">${d.client_name||'—'}</td>
+              <td style="padding:2px 12px 2px 0;color:#ea580c;font-weight:700">${d.quantity_boxes||0}</td>
+              <td style="padding:2px 0;color:#ea580c;font-weight:700">${parseFloat(d.total_ounces||0).toFixed(1)} oz</td>
+            </tr>`).join('')}</tbody>
+          </table>` : '<span style="color:#aaa;font-size:0.78rem">No orders for this variety tomorrow.</span>';
+        html += `<tr style="cursor:pointer" onclick="event.stopPropagation();toggleHarvestAlloc('${_allocId}')">
           <td>${simplifyRack(b._rack_assignment)}</td>
-          <td>${b.name||'—'}</td>
+          <td><span id="${_allocId}_chev" style="color:#1a56cc;font-size:0.72rem;margin-right:4px">▶</span>${b.name||'—'}${_allocBadge}</td>
           <td>
             <div class="yield-wrap">
               <input class="yield-input" id="hi_trays_${b.id}" type="number" min="0" max="${total}" value="${harvVal}"
+                onclick="event.stopPropagation()"
                 onchange="setHarvestOverride('${b.id}','trays',this.value,${total},'hbar_${b.id}')">
               <span class="yield-of">/ ${total}</span>
               <div class="yield-bar-wrap"><div class="yield-bar" id="hbar_${b.id}" style="width:${pct}%"></div></div>
@@ -1494,12 +1534,18 @@ function renderForDate(viewDate) {
             <div class="yield-wrap">
               <input class="yield-input yield-oz" id="hi_yield_${b.id}" type="number" min="0" step="0.1"
                 value="${yieldVal}" placeholder="0.0"
+                onclick="event.stopPropagation()"
                 onchange="setHarvestOverride('${b.id}','yield',this.value)">
               <span class="yield-of">oz</span>
             </div>
           </td>
           <td>${actualAvg}</td>
           <td style="color:#888">${expectedAvg}</td>
+        </tr>
+        <tr id="${_allocId}" style="display:none">
+          <td colspan="6" style="padding:6px 8px 12px 28px;background:#f0f7ff;border-bottom:1px solid #dbeafe">
+            ${_allocTable}
+          </td>
         </tr>`;
       });
       html += '</tbody></table></div>';
