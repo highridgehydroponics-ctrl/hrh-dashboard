@@ -54,6 +54,8 @@
   .kpi-orange .kpi-val { color: #ea580c; }
   .kpi-blue   .kpi-val { color: #1d4ed8; }
   .kpi-purple .kpi-val { color: #7c3aed; }
+  .kpi.kpi-complete { background: #f0fdf4 !important; }
+  .kpi.kpi-complete .kpi-val { color: #15803d !important; }
 
   /* ── SECTIONS ── */
   .section { background: #fff; border-radius: 10px; padding: 18px 20px;
@@ -1178,23 +1180,46 @@ function renderForDate(viewDate) {
   const ozEntries = Object.entries(ozByVariety).sort((a,b) => a[0].localeCompare(b[0])); // A-Z
 
   const totalHarvestTrays = allHarvestToday.reduce((sum, b) => sum + (parseInt(b.number_of_trays)||0), 0);
+  // ── KPI COMPLETION RATIOS ──
+  // Delivery routes: completed vs total
+  const kpiRoutesTotal = todayRoutes.length || activeOrders.length;
+  const kpiRoutesDone  = todayRoutes.length
+    ? todayRoutes.filter(r => (r.status||'').toLowerCase().includes('complet')).length
+    : activeOrders.filter(o => (deriveOrderStatus(o.id, todayDetails, o)||'').toLowerCase().includes('complet')).length;
+
+  // Pack-out: packed (done) vs total non-cancelled items
+  const kpiPackTotal = todayDetails.filter(d => !(d.status||'').toLowerCase().includes('cancel')).length;
+  const kpiPackDone  = kpiPackTotal - upcomingItems.length;
+
+  // Batches to harvest: fully harvested vs total
+  const kpiHarvestTotal = allHarvestToday.length;
+  const kpiHarvestDone  = allHarvestToday.filter(b =>
+    (b.status_name||'').toLowerCase().includes('harvested') &&
+    !(b.status_name||'').toLowerCase().includes('being')
+  ).length;
+
   const kpiDefs = [
-    { val: todayRoutes.length || activeOrders.length, label: 'Delivery Routes Today',           target: 'sec-stops',   cls: 'kpi-green'  },
-    { val: upcomingItems.length,   label: 'Remaining Items to Pack Out for Today\'s Deliveries', target: 'sec-packout', cls: 'kpi-orange' },
-    { val: totalLabels,            label: 'Labels to Print for TMRO Orders',                    target: 'sec-labels',  cls: 'kpi-orange' },
-    { val: allHarvestToday.length, label: 'Batches to Harvest Today for TMRO Orders',           target: 'sec-harvest', cls: 'kpi-blue'   },
-    { val: plantTraySum,           label: 'Trays to Plant',                                     target: 'sec-plant',   cls: 'kpi-blue'   },
-    { val: ozEntries.length,       label: 'Allocation Details',                                 target: 'sec-oz',      cls: 'kpi-purple' },
-    { val: tmrOrders.length,       label: 'Deliveries Tomorrow',                                target: 'sec-tomorrow',cls: 'kpi-purple' },
+    { val: kpiRoutesTotal,  done: kpiRoutesDone,  label: 'Delivery Routes Today',                           target: 'sec-stops',   cls: 'kpi-green'  },
+    { val: kpiPackTotal,    done: kpiPackDone,    label: 'Items Packed Out for Today\'s Deliveries',         target: 'sec-packout', cls: 'kpi-orange' },
+    { val: totalLabels,                           label: 'Labels to Print for TMRO Orders',                  target: 'sec-labels',  cls: 'kpi-orange' },
+    { val: kpiHarvestTotal, done: kpiHarvestDone, label: 'Batches to Harvest Today for TMRO Orders',         target: 'sec-harvest', cls: 'kpi-blue'   },
+    { val: plantTraySum,                          label: 'Trays to Plant',                                   target: 'sec-plant',   cls: 'kpi-blue'   },
+    { val: ozEntries.length,                      label: 'Allocation Details',                               target: 'sec-oz',      cls: 'kpi-purple' },
+    { val: tmrOrders.length,                      label: 'Deliveries Tomorrow',                              target: 'sec-tomorrow',cls: 'kpi-purple' },
   ];
-  document.getElementById('kpiBar').innerHTML = kpiDefs.map(k =>
-    `<div class="kpi ${k.cls}${activeFilter===k.target?' active':''}"
+  document.getElementById('kpiBar').innerHTML = kpiDefs.map(k => {
+    const hasFrac = k.done !== undefined && k.val > 0;
+    const valHtml = hasFrac
+      ? `<span style="font-size:1em">${k.done}</span><span style="font-size:0.55em;opacity:0.7;margin:0 1px">/</span><span style="font-size:0.7em;opacity:0.85">${k.val}</span>`
+      : k.val;
+    const allDone = hasFrac && k.done === k.val && k.val > 0;
+    return `<div class="kpi ${k.cls}${activeFilter===k.target?' active':''}${allDone?' kpi-complete':''}"
       data-target="${k.target}" onclick="filterSection(this)">
-      <div class="kpi-val">${k.val}</div>
+      <div class="kpi-val">${valHtml}</div>
       <div class="kpi-label">${k.label}</div>
       <div class="kpi-hint">click to focus</div>
-    </div>`
-  ).join('');
+    </div>`;
+  }).join('');
 
   // ── PACK-OUT (upcoming items only, sorted by stop) ──
   document.getElementById('badge-stops').textContent = upcomingItems.length;
