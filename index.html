@@ -1094,6 +1094,12 @@ function renderForDate(viewDate) {
 
   // ── KPI BAR ──
   const totalLabels = labelsToday.length + labelsTmr.length;
+  // Labels KPI: total line items (today+tmr, non-live) vs how many have been printed
+  const kpiLabelsCandidates = [...todayDetails, ...tmrDetails].filter(d =>
+    !(d.product_name||'').toLowerCase().includes('live')
+  );
+  const kpiLabelsTotal = kpiLabelsCandidates.length;
+  const kpiLabelsDone  = kpiLabelsCandidates.filter(d => d['labels_printed?'] === 'Y').length;
   // Microgreen-only filter (no lettuce, no mixes)
   function isMicrogreenBatch(b) {
     const v = varMap[b.variety];
@@ -1122,6 +1128,9 @@ function renderForDate(viewDate) {
     return !nm.includes('lettuce') && !nm.includes('hydro salanova') && !nm.includes('little gem');
   });
   const plantTraySum = nonLettuceNonMixForKpi.reduce((sum, b) => sum + (parseInt(b.number_of_trays)||0), 0);
+  const completedTraySum = nonLettuceNonMixForKpi
+    .filter(b => (b.status_name||'').toLowerCase().includes('stacked'))
+    .reduce((sum, b) => sum + (parseInt(b.number_of_trays)||0), 0);
   // Build oz-by-variety map — single day, includes mixes (not lettuce), sorted A-Z
   // Live tray products are excluded from oz totals
   const ozDate = __allocDate || tmrStr;
@@ -1201,9 +1210,9 @@ function renderForDate(viewDate) {
   const kpiDefs = [
     { val: kpiRoutesTotal,  done: kpiRoutesDone,  label: 'Delivery Routes Today',                           target: 'sec-stops',   cls: 'kpi-green'  },
     { val: kpiPackTotal,    done: kpiPackDone,    label: 'Items Packed Out for Today\'s Deliveries',         target: 'sec-packout', cls: 'kpi-orange' },
-    { val: totalLabels,                           label: 'Labels to Print for TMRO Orders',                  target: 'sec-labels',  cls: 'kpi-orange' },
+    { val: kpiLabelsTotal, done: kpiLabelsDone,   label: 'Labels to Print for TMRO Orders',                  target: 'sec-labels',  cls: 'kpi-orange' },
     { val: kpiHarvestTotal, done: kpiHarvestDone, label: 'Batches to Harvest Today for TMRO Orders',         target: 'sec-harvest', cls: 'kpi-blue'   },
-    { val: plantTraySum,                          label: 'Trays to Plant',                                   target: 'sec-plant',   cls: 'kpi-blue'   },
+    { val: plantTraySum, done: completedTraySum,   label: 'Trays to Plant',                                   target: 'sec-plant',   cls: 'kpi-blue'   },
     { val: ozEntries.length,                      label: 'Allocation Details',                               target: 'sec-oz',      cls: 'kpi-purple' },
     { val: tmrOrders.length,                      label: 'Deliveries Tomorrow',                              target: 'sec-tomorrow',cls: 'kpi-purple' },
   ];
