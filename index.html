@@ -874,6 +874,26 @@ async function saveHarvestRow(batchId) {
 }
 
 // ── DATE HELPERS ──────────────────────────────────────────────────────────────
+// Returns bin count and oz-per-bin for a given total oz (max 120 oz per bin)
+function binInfo(totalOz) {
+  if (!totalOz || totalOz <= 0) return { bins: 1, perBin: 0 };
+  const bins   = Math.ceil(totalOz / 120);
+  const perBin = Math.round(totalOz / bins * 10) / 10;
+  return { bins, perBin };
+}
+// Renders a compact bin badge — only shown when >1 bin needed
+function binBadge(totalOz) {
+  const { bins, perBin } = binInfo(totalOz);
+  if (bins <= 1) return '';
+  return `<span style="margin-left:6px;font-size:0.7rem;background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 6px;font-weight:700;white-space:nowrap">${bins} bins × ${perBin} oz</span>`;
+}
+// Full bin display (used in the Bins column)
+function binCell(totalOz) {
+  const { bins, perBin } = binInfo(totalOz);
+  if (bins <= 1) return `<span style="color:#aaa">1 bin</span>`;
+  return `<span style="font-weight:700;color:#92400e">${bins} bins</span><span style="color:#b45309;font-size:0.78rem"> × ${perBin} oz</span>`;
+}
+
 function normDate(s) {
   if (!s) return '';
   s = s.trim();
@@ -1659,7 +1679,7 @@ function renderForDate(viewDate) {
             let rows = `<tr>
               <td style="padding:4px 12px 2px 0;font-weight:700;color:#1e293b" colspan="2">${pname}</td>
               <td style="padding:4px 12px 2px 0;color:#ea580c;font-weight:700">${totalQty}</td>
-              <td style="padding:4px 0 2px 0;color:#ea580c;font-weight:700">${totalOz.toFixed(1)} oz</td>
+              <td style="padding:4px 0 2px 0;color:#ea580c;font-weight:700;white-space:nowrap">${totalOz.toFixed(1)} oz ${binBadge(totalOz)}</td>
             </tr>`;
             // One sub-row per customer, sorted A-Z
             pitems.sort((a,b) => (a.client_name||'').localeCompare(b.client_name||''));
@@ -1675,7 +1695,7 @@ function renderForDate(viewDate) {
             <thead><tr>
               <th style="color:#9ca3af;font-weight:600;padding:2px 12px 4px 0" colspan="2">Product / Customer</th>
               <th style="color:#9ca3af;font-weight:600;padding:2px 12px 4px 0">Qty</th>
-              <th style="color:#9ca3af;font-weight:600;padding:2px 0 4px 0">Total OZ</th>
+              <th style="color:#9ca3af;font-weight:600;padding:2px 12px 4px 0">Total OZ</th>
             </tr></thead>
             <tbody>${_allocRows}</tbody>
           </table>` : '<span style="color:#aaa;font-size:0.78rem">No orders for this variety tomorrow.</span>';
@@ -1834,7 +1854,7 @@ function renderForDate(viewDate) {
     document.getElementById('oz-body').innerHTML = '<div class="empty">No allocation data for this date.</div>';
   } else {
     let oz = `<div class="tbl-wrap"><table>
-      <thead><tr><th style="width:30px"></th><th>Variety</th><th style="color:#6b7280;font-size:0.78rem">Batch</th><th style="color:#6b7280;font-size:0.78rem">Rack</th><th>Total Oz</th></tr></thead><tbody>`;
+      <thead><tr><th style="width:30px"></th><th>Variety</th><th style="color:#6b7280;font-size:0.78rem">Batch</th><th style="color:#6b7280;font-size:0.78rem">Rack</th><th>Total Oz</th><th style="color:#92400e;font-size:0.78rem">Bins</th></tr></thead><tbody>`;
     // Compute harvest date = day before ozDate
     const [_ozM,_ozD,_ozY] = ozDate.split('/');
     const harvestDateStr = fmt(addDays(new Date(parseInt(_ozY),parseInt(_ozM)-1,parseInt(_ozD)),-1));
@@ -1859,9 +1879,10 @@ function renderForDate(viewDate) {
         <td style="font-size:0.8rem;color:#374151">${batchDisplay}</td>
         <td style="font-size:0.8rem;color:#374151">${rackDisplay}</td>
         <td class="oz-total">${data.total} oz</td>
+        <td style="white-space:nowrap">${binCell(data.total)}</td>
       </tr>
       <tr id="${rowId}" style="display:none">
-        <td colspan="3" style="padding:0 0 8px 24px;background:#f8f9fc">
+        <td colspan="4" style="padding:0 0 8px 24px;background:#f8f9fc">
           <table style="width:auto;font-size:0.8rem;margin-top:6px;border-collapse:collapse">
             <thead><tr>
               <th style="color:#aaa;font-weight:600;padding:2px 4px">Product</th>
@@ -1919,7 +1940,7 @@ function renderForDate(viewDate) {
             <td style="padding:3px 8px;color:#92400e;font-style:italic">${comp.componentName}</td>
             <td style="padding:3px 8px;color:#b45309;font-weight:600">${comp.pct}%</td>
             <td style="padding:3px 8px;color:#b45309;font-weight:600">${compOz} oz</td>
-            <td style="padding:3px 8px;color:#aaa;font-size:0.75rem">of ${data.total} oz total</td>
+            <td style="padding:3px 8px;white-space:nowrap">${binCell(compOz)}</td>
           </tr>`;
         });
       }
