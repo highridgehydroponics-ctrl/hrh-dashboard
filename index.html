@@ -281,10 +281,17 @@
   <div class="kpi-bar" id="kpiBar"></div>
 
   <div class="section" id="sec-packout">
-    <div class="section-title">
+    <div class="section-title" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px">
       📦 Pack Out for Today's Deliveries
       <span class="sec-badge" id="badge-stops"></span>
       <span class="sec-sub" id="packout-sub"></span>
+      <span style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:0.75rem;font-weight:400;color:#64748b">
+        Date:
+        <input type="date" id="packDateInput"
+          style="font-size:0.78rem;padding:2px 6px;border:1px solid #cbd5e1;border-radius:6px;color:#1e293b;cursor:pointer"
+          onchange="setPackDate(this.value)">
+        <button onclick="setPackDate('')" style="font-size:0.72rem;padding:2px 7px;border:1px solid #cbd5e1;border-radius:6px;background:#f8fafc;color:#64748b;cursor:pointer">Reset</button>
+      </span>
     </div>
     <div id="packout-body"></div>
     <div id="packOutSaveBar">
@@ -391,6 +398,7 @@ const __harvestOverrides = {}; // keyed by batch id: { trays, yield }
 const __dirtyHarvests    = new Set(); // batch IDs with unsaved changes
 const __pendingPackOuts  = {}; // order_detail id → true (queued for Packed Out)
 let __allocDate = null;        // MM/DD/YYYY override for Allocation Details, null = use viewDate
+let __packDate  = null;        // MM/DD/YYYY override for Pack Out date, null = use viewDate
 
 function getContainer(rackStr) {
   if (!rackStr) return 'Other';
@@ -779,6 +787,15 @@ function setAllocDate(val) {
   if (__store) renderForDate(__viewDate);
 }
 
+function setPackDate(val) {
+  if (!val) { __packDate = null; }
+  else {
+    const [y, m, d] = val.split('-');
+    __packDate = `${m}/${d}/${y}`;
+  }
+  if (__store) renderForDate(__viewDate);
+}
+
 async function markAllHarvested() {
   const btn = document.getElementById('markHarvestedBtn');
   // Find all today's harvest batches with status_name containing "being harvested"
@@ -1039,6 +1056,14 @@ function renderForDate(viewDate) {
   document.getElementById('todayBtn').style.display = isToday(viewDate) ? 'none' : 'inline-block';
   updateTodayBtn();
 
+  // Sync pack-out date input to current override (or viewDate)
+  const packStr = __packDate || todayStr;
+  const packInputEl = document.getElementById('packDateInput');
+  if (packInputEl) {
+    const [pm, pd, py] = packStr.split('/');
+    packInputEl.value = `${py}-${pm}-${pd}`;
+  }
+
   // Filter data
   const todayOrders  = ordersAll.filter(o => o.fulfillment_date === todayStr);
   const todayDetails = detailAll.filter(d => d.fulfillment_date === todayStr);
@@ -1049,21 +1074,24 @@ function renderForDate(viewDate) {
   const plantings    = batchAll.filter(b => (b.optimal_planting_date||'').trim() === todayStr);
 
   // Pack-out: ONLY upcoming items (not packed out, not cancelled)
-  const upcomingItems = todayDetails.filter(d => {
+  // Pack-out items — use __packDate override if set, otherwise viewDate
+  const packDetails     = detailAll.filter(d => d.fulfillment_date === packStr);
+  const packOrders      = ordersAll.filter(o => o.fulfillment_date === packStr);
+  const upcomingItems   = packDetails.filter(d => {
     const s = (d.status||'').toLowerCase();
     return s.includes('upcoming') && !s.includes('cancel');
   });
-  const packedItems = todayDetails.filter(d => {
+  const packedItems     = packDetails.filter(d => {
     const s = (d.status||'').toLowerCase();
     return s.includes('packed') && !s.includes('cancel');
   });
   // Use derived status to avoid AppSheet order-table cache lag
-  const activeOrders    = todayOrders.filter(o => {
-    const s = (deriveOrderStatus(o.id, todayDetails, o) || o.status || '').toLowerCase();
+  const activeOrders    = packOrders.filter(o => {
+    const s = (deriveOrderStatus(o.id, packDetails, o) || o.status || '').toLowerCase();
     return !s.includes('cancel');
   });
-  const cancelledOrders = todayOrders.filter(o => {
-    const s = (deriveOrderStatus(o.id, todayDetails, o) || o.status || '').toLowerCase();
+  const cancelledOrders = packOrders.filter(o => {
+    const s = (deriveOrderStatus(o.id, packDetails, o) || o.status || '').toLowerCase();
     return s.includes('cancel');
   });
 
@@ -1369,9 +1397,9 @@ function renderForDate(viewDate) {
   // ── Pending section ──
   if (upcomingItems.length) {
     packHtml += `<div class="harvest-sub-label pending-lbl" style="margin-top:0">⏳ Pending (${upcomingItems.length})</div>`;
-    packHtml += `<div class="tbl-wrap"><table>
+    packHtml += `<div class="tbl-wrap"><table style="width:auto;min-width:0">
       <thead><tr>
-        <th>Product</th><th>Qty</th><th>Customer</th><th>Status</th>
+        <th style="white-space:nowrap">Product</th><th>Qty</th><th style="white-space:nowrap">Customer</th><th>Status</th>
         <th style="width:36px;text-align:center">
           <input type="checkbox" class="pack-group-chk" id="packSelectAll"
             title="Select all"
@@ -1388,9 +1416,9 @@ function renderForDate(viewDate) {
   // ── Completed section ──
   if (packedItems.length) {
     packHtml += `<div class="harvest-sub-label done-lbl">✅ Packed Out (${packedItems.length})</div>`;
-    packHtml += `<div class="tbl-wrap"><table>
+    packHtml += `<div class="tbl-wrap"><table style="width:auto;min-width:0">
       <thead><tr>
-        <th>Product</th><th>Qty</th><th>Customer</th><th>Status</th>
+        <th style="white-space:nowrap">Product</th><th>Qty</th><th style="white-space:nowrap">Customer</th><th>Status</th>
         <th style="width:36px"></th>
       </tr></thead>
       <tbody>${packedRows}</tbody>
@@ -1399,7 +1427,7 @@ function renderForDate(viewDate) {
 
   // ── Cancelled section ──
   if (cancelledOrders.length) {
-    const cancelRows = buildCancelRows(cancelledOrders, todayDetails);
+    const cancelRows = buildCancelRows(cancelledOrders, packDetails);
     if (cancelRows) {
       packHtml += `<div class="cancelled-section">
         <button class="cancelled-toggle" onclick="toggleCancelled()">
@@ -1407,7 +1435,7 @@ function renderForDate(viewDate) {
           ${cancelledOrders.length} cancelled order${cancelledOrders.length>1?'s':''}
         </button>
         <div id="cancelledBody" style="display:none">
-          <div class="tbl-wrap"><table>
+          <div class="tbl-wrap"><table style="width:auto;min-width:0">
             <thead><tr><th>Product</th><th>Total Qty</th><th>Customer</th><th>Status</th></tr></thead>
             <tbody>${cancelRows}</tbody>
           </table></div>
