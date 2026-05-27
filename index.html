@@ -1024,9 +1024,19 @@ function renderForDate(viewDate) {
 
   // Update date displays
   const bigDateEl = document.getElementById('bigDate');
-  if (bigDateEl) bigDateEl.textContent = viewDate.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
-  document.getElementById('dateDisplay').textContent  = fmtLong(viewDate);
-  document.getElementById('todayBtn').style.display   = isToday(viewDate) ? 'none' : 'inline-block';
+  // Color date header: green = today, orange = past, black = future
+  const _now = new Date(); _now.setHours(0,0,0,0);
+  const _vd  = new Date(viewDate); _vd.setHours(0,0,0,0);
+  const _dateColor = _vd.getTime() === _now.getTime() ? '#16a34a'
+                   : _vd.getTime()  <  _now.getTime() ? '#ea580c'
+                   : '#111';
+  if (bigDateEl) {
+    bigDateEl.textContent = viewDate.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+    bigDateEl.style.color = _dateColor;
+  }
+  const _dispEl = document.getElementById('dateDisplay');
+  if (_dispEl) { _dispEl.textContent = fmtLong(viewDate); _dispEl.style.color = _dateColor; }
+  document.getElementById('todayBtn').style.display = isToday(viewDate) ? 'none' : 'inline-block';
   updateTodayBtn();
 
   // Filter data
