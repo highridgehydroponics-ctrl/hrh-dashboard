@@ -1017,7 +1017,7 @@ function updateYield(input, total, barId) {
 // ── RENDER ────────────────────────────────────────────────────────────────────
 function renderForDate(viewDate) {
   if (!__store) return;
-  const { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap, mixMap, deliveryByOrder, delivItemAll, deliveryAll, vehicleMap } = __store;
+  const { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap, mixMap, deliveryByOrder, delivItemAll, deliveryAll, vehicleMap, journeyAll } = __store;
 
   const todayStr = fmt(viewDate);
   const tmrStr   = fmt(addDays(viewDate, 1));
@@ -1042,6 +1042,10 @@ function renderForDate(viewDate) {
   const upcomingItems = todayDetails.filter(d => {
     const s = (d.status||'').toLowerCase();
     return s.includes('upcoming') && !s.includes('cancel');
+  });
+  const packedItems = todayDetails.filter(d => {
+    const s = (d.status||'').toLowerCase();
+    return s.includes('packed') && !s.includes('cancel');
   });
   // Use derived status to avoid AppSheet order-table cache lag
   const activeOrders    = todayOrders.filter(o => {
@@ -1200,12 +1204,21 @@ function renderForDate(viewDate) {
   const kpiPackTotal = todayDetails.filter(d => !(d.status||'').toLowerCase().includes('cancel')).length;
   const kpiPackDone  = kpiPackTotal - upcomingItems.length;
 
-  // Batches to harvest: fully harvested vs total
-  const kpiHarvestTotal = allHarvestToday.length;
-  const kpiHarvestDone  = allHarvestToday.filter(b =>
-    (b.status_name||'').toLowerCase().includes('harvested') &&
-    !(b.status_name||'').toLowerCase().includes('being')
-  ).length;
+  // Batches to harvest KPI — driven by growth_journey records scheduled for today.
+  // This keeps the total stable even after batches are marked harvested/harvesting.
+  // growth_task_type label check is case-insensitive; 'harvest' matches 'Harvest'.
+  const harvestJourneysToday = (journeyAll || []).filter(j => {
+    const sched = normDate(j.scheduled_date || '');
+    const isToday_ = sched === todayStr;
+    const taskType = (j.growth_task_type || '').toLowerCase();
+    const isHarvestTask = taskType.includes('harvest');
+    return isToday_ && isHarvestTask;
+  });
+  const kpiHarvestTotal = harvestJourneysToday.length;
+  const kpiHarvestDone  = harvestJourneysToday.filter(j => {
+    const exec = (j.execution || '').toLowerCase();
+    return exec.includes('harvest');  // matches 'harvested', 'harvesting', 'being harvested'
+  }).length;
 
   const kpiDefs = [
     { val: kpiRoutesTotal,  done: kpiRoutesDone,  label: 'Delivery Routes Today',                           target: 'sec-stops',   cls: 'kpi-green'  },
@@ -1218,11 +1231,14 @@ function renderForDate(viewDate) {
   ];
   document.getElementById('kpiBar').innerHTML = kpiDefs.map(k => {
     const hasFrac = k.done !== undefined && k.val > 0;
-    const valHtml = hasFrac
-      ? `<span style="font-size:1em">${k.done}</span><span style="font-size:0.55em;opacity:0.7;margin:0 1px">/</span><span style="font-size:0.7em;opacity:0.85">${k.val}</span>`
-      : k.val;
     const allDone = hasFrac && k.done === k.val && k.val > 0;
-    return `<div class="kpi ${k.cls}${activeFilter===k.target?' active':''}${allDone?' kpi-complete':''}"
+    const numColor = hasFrac ? (allDone ? '#16a34a' : '#ea580c') : '';
+    const valHtml = hasFrac
+      ? `<span style="color:${numColor};font-size:1em;font-weight:800">${k.done}</span>`
+        + `<span style="color:${numColor};font-size:0.55em;opacity:0.6;margin:0 1px">/</span>`
+        + `<span style="color:${numColor};font-size:0.7em;opacity:0.85;font-weight:700">${k.val}</span>`
+      : k.val;
+    return `<div class="kpi ${k.cls}${activeFilter===k.target?' active':''}"
       data-target="${k.target}" onclick="filterSection(this)">
       <div class="kpi-val">${valHtml}</div>
       <div class="kpi-label">${k.label}</div>
@@ -1230,10 +1246,10 @@ function renderForDate(viewDate) {
     </div>`;
   }).join('');
 
-  // ── PACK-OUT (upcoming items only, sorted by stop) ──
+  // ── PACK-OUT (pending + completed) ──
   document.getElementById('badge-stops').textContent = upcomingItems.length;
   document.getElementById('packout-sub').textContent =
-    `Upcoming items only · sorted by stop`;
+    `${upcomingItems.length} pending · ${packedItems.length} packed out`;
 
   const sortedOrders = [...activeOrders].sort((a,b) =>
     (parseInt(a.stop_number)||9999) - (parseInt(b.stop_number)||9999)
@@ -1308,12 +1324,50 @@ function renderForDate(viewDate) {
     return rows;
   };
 
-  const activeRows = buildPackRows(upcomingItems);
+  // Build read-only completed rows (grouped by product, no checkboxes)
+  const buildPackedCompletedRows = (items) => {
+    const byProd = {};
+    items.forEach(it => {
+      const pname = it.product_name || '—';
+      if (!byProd[pname]) byProd[pname] = [];
+      byProd[pname].push(it);
+    });
+    let rows = '';
+    Object.entries(byProd).sort(([a],[b]) => a.localeCompare(b)).forEach(([pname, pitems]) => {
+      const totalQty = pitems.reduce((s,it) => s + (parseInt(it.quantity_boxes)||0), 0);
+      const gid = 'pkd_' + pname.replace(/\W+/g,'_');
+      rows += `<tr class="pack-group-hdr" onclick="selectPackGroup('${gid}')">
+        <td colspan="3">
+          <span id="${gid}_chev" style="font-size:0.72rem;margin-right:6px;color:#16a34a">▶</span>
+          ${pname}
+          <span class="qty-badge" style="margin-left:6px;background:#d1fae5;color:#065f46">${totalQty}</span>
+        </td>
+        <td style="text-align:right;padding-right:6px;color:#64748b;font-size:0.75rem">${pitems.length} order${pitems.length>1?'s':''}</td>
+        <td style="width:36px;text-align:center;color:#16a34a;font-size:1rem">✓</td>
+      </tr>`;
+      pitems.forEach(it => {
+        const ord = orderMap[it.order] || {};
+        const customer = it.client_name || ord.client_name || '—';
+        rows += `<tr class="pack-item-row" data-gid="${gid}" style="display:none">
+          <td style="padding-left:22px;color:#555;font-size:0.82rem">${pname}</td>
+          <td><span class="qty-badge" style="background:#d1fae5;color:#065f46">${it.quantity_boxes||0}</span></td>
+          <td class="customer-col">${customer}</td>
+          <td><span class="status-dot dot-packed" title="Packed Out"></span></td>
+          <td style="text-align:center;width:36px;color:#16a34a">✓</td>
+        </tr>`;
+      });
+    });
+    return rows;
+  };
+
+  const activeRows  = buildPackRows(upcomingItems);
+  const packedRows  = buildPackedCompletedRows(packedItems);
   let packHtml = '';
-  if (!activeRows) {
-    packHtml = '<div class="empty">No upcoming items to pack for this date.</div>';
-  } else {
-    packHtml = `<div class="tbl-wrap"><table>
+
+  // ── Pending section ──
+  if (upcomingItems.length) {
+    packHtml += `<div class="harvest-sub-label pending-lbl" style="margin-top:0">⏳ Pending (${upcomingItems.length})</div>`;
+    packHtml += `<div class="tbl-wrap"><table>
       <thead><tr>
         <th>Product</th><th>Qty</th><th>Customer</th><th>Status</th>
         <th style="width:36px;text-align:center">
@@ -1324,24 +1378,46 @@ function renderForDate(viewDate) {
       </tr></thead>
       <tbody>${activeRows}</tbody>
     </table></div>`;
-    if (cancelledOrders.length) {
-      const cancelRows = buildCancelRows(cancelledOrders, todayDetails);
-      if (cancelRows) {
-        packHtml += `<div class="cancelled-section">
-          <button class="cancelled-toggle" onclick="toggleCancelled()">
-            <span id="cancelChevron">▶</span>
-            ${cancelledOrders.length} cancelled order${cancelledOrders.length>1?'s':''}
-          </button>
-          <div id="cancelledBody" style="display:none">
-            <div class="tbl-wrap"><table>
-              <thead><tr><th>Product</th><th>Total Qty</th><th>Customer</th><th>Status</th></tr></thead>
-              <tbody>${cancelRows}</tbody>
-            </table></div>
-          </div>
-        </div>`;
-      }
+  } else {
+    packHtml += `<div class="harvest-sub-label pending-lbl" style="margin-top:0">⏳ Pending (0)</div>`;
+    packHtml += `<div class="empty">All items packed out for this date.</div>`;
+  }
+
+  // ── Completed section ──
+  if (packedItems.length) {
+    packHtml += `<div class="harvest-sub-label done-lbl">✅ Packed Out (${packedItems.length})</div>`;
+    packHtml += `<div class="tbl-wrap"><table>
+      <thead><tr>
+        <th>Product</th><th>Qty</th><th>Customer</th><th>Status</th>
+        <th style="width:36px"></th>
+      </tr></thead>
+      <tbody>${packedRows}</tbody>
+    </table></div>`;
+  }
+
+  // ── Cancelled section ──
+  if (cancelledOrders.length) {
+    const cancelRows = buildCancelRows(cancelledOrders, todayDetails);
+    if (cancelRows) {
+      packHtml += `<div class="cancelled-section">
+        <button class="cancelled-toggle" onclick="toggleCancelled()">
+          <span id="cancelChevron">▶</span>
+          ${cancelledOrders.length} cancelled order${cancelledOrders.length>1?'s':''}
+        </button>
+        <div id="cancelledBody" style="display:none">
+          <div class="tbl-wrap"><table>
+            <thead><tr><th>Product</th><th>Total Qty</th><th>Customer</th><th>Status</th></tr></thead>
+            <tbody>${cancelRows}</tbody>
+          </table></div>
+        </div>
+      </div>`;
     }
   }
+
+  if (!upcomingItems.length && !packedItems.length && !cancelledOrders.length) {
+    packHtml = '<div class="empty">No items for this date.</div>';
+  }
+
   document.getElementById('packout-body').innerHTML = packHtml;
 
   // ── DELIVERIES TODAY (route cards) ──
@@ -2016,7 +2092,7 @@ async function loadData() {
   document.getElementById('warnBadge').style.display = 'none';
 
   try {
-    const [sliceAll, ordersAll, detailAll, batchAll, varietyAll, clientAll, varietyMixAll, deliveryAll, vehicleAll, delivItemAll] = await Promise.all([
+    const [sliceAll, ordersAll, detailAll, batchAll, varietyAll, clientAll, varietyMixAll, deliveryAll, vehicleAll, delivItemAll, journeyAll] = await Promise.all([
       appFetch(ORDERS, 'labels to print upcoming week only'),
       appFetch(ORDERS, 'order'),
       appFetch(ORDERS, 'order_detail'),
@@ -2026,7 +2102,8 @@ async function loadData() {
       appFetch(GR,     'variety_mix'),
       appFetch(DELIV,  'delivery'),
       appFetch(DELIV,  'vehicle'),
-      appFetch(DELIV,  'delivery_item')
+      appFetch(DELIV,  'delivery_item'),
+      appFetch(GC,     'growth_journey')
     ]);
 
     const varMap = {};
@@ -2087,7 +2164,15 @@ async function loadData() {
       });
     }
 
-    __store = { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap, mixMap, deliveryByOrder, delivItemAll, deliveryAll, vehicleMap };
+    __store = { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap, mixMap, deliveryByOrder, delivItemAll, deliveryAll, vehicleMap, journeyAll };
+    // Debug: log growth_journey structure so we can see field values
+    if (journeyAll && journeyAll.length) {
+      console.log('[HRH] growth_journey sample record:', JSON.stringify(journeyAll[0]));
+      const taskTypes = [...new Set(journeyAll.map(j => j.growth_task_type).filter(Boolean))];
+      const execValues = [...new Set(journeyAll.map(j => j.execution).filter(Boolean))];
+      console.log('[HRH] growth_journey task types:', taskTypes);
+      console.log('[HRH] growth_journey execution values:', execValues);
+    }
     // ── DELIVERY DEBUG ──
     console.log('[HRH] deliveryAll records:', deliveryAll ? deliveryAll.length : 'null');
     console.log('[HRH] delivItemAll records:', delivItemAll ? delivItemAll.length : 'null');
