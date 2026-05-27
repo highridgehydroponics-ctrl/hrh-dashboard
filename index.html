@@ -203,6 +203,12 @@
   #packOutSaveBar button { pointer-events:all; background:#1d4ed8; color:#fff; border:none; border-radius:10px; padding:9px 24px; font-size:0.9rem; font-weight:700; cursor:pointer; box-shadow:0 4px 14px rgba(29,78,216,.35); }
   #packOutSaveBar button:hover { background:#1e40af; }
   #packOutSaveBar button:disabled { background:#94a3b8; }
+  #qtySaveBar { display:none; position:sticky; bottom:60px; z-index:50; justify-content:center; pointer-events:none; gap:10px; }
+  #qtySaveBar button { pointer-events:all; background:#0f766e; color:#fff; border:none; border-radius:10px; padding:9px 24px; font-size:0.9rem; font-weight:700; cursor:pointer; box-shadow:0 4px 14px rgba(15,118,110,.35); }
+  #qtySaveBar button:hover { background:#0d9488; }
+  #qtySaveBar button:disabled { background:#94a3b8; }
+  .qty-edit-input { width:52px; padding:2px 4px; border:1px solid #cbd5e1; border-radius:5px; font-size:0.84rem; font-weight:700; text-align:center; color:#1e293b; background:#f8fafc; }
+  .qty-edit-input:focus { outline:none; border-color:#0f766e; background:#f0fdf9; }
 
   .packout-chk { width: 26px; height: 26px; border-radius: 50%;
     border: 2px solid #cbd5e1; background: #fff; color: #94a3b8;
@@ -297,6 +303,11 @@
     <div id="packOutSaveBar">
       <button id="packOutSaveBtn" onclick="savePackOutSelections()">
         📦 Mark Selected as Packed Out (<span id="packOutCount">0</span>)
+      </button>
+    </div>
+    <div id="qtySaveBar">
+      <button id="qtySaveBtn" onclick="saveQtyEdits()">
+        💾 Save Qty Changes (<span id="qtySaveCount">0</span>)
       </button>
     </div>
   </div>
@@ -397,6 +408,7 @@ let __viewDate           = new Date();
 const __harvestOverrides = {}; // keyed by batch id: { trays, yield }
 const __dirtyHarvests    = new Set(); // batch IDs with unsaved changes
 const __pendingPackOuts  = {}; // order_detail id → true (queued for Packed Out)
+const __pendingQtyEdits  = {}; // order_detail id → new quantity (unsaved)
 let __allocDate = null;        // MM/DD/YYYY override for Allocation Details, null = use viewDate
 let __packDate  = null;        // MM/DD/YYYY override for Pack Out date, null = use viewDate
 
@@ -487,6 +499,53 @@ function refreshPackOutBar() {
   if (bar) bar.style.display = n > 0 ? 'block' : 'none';
   if (cnt) cnt.textContent = n;
   updateSaveBadge(); // keep the global floating save badge in sync too
+}
+
+// ── Qty edit tracking ──────────────────────────────────────────────────────
+function onQtyChange(id, newVal) {
+  const qty = parseInt(newVal);
+  if (isNaN(qty) || qty < 0) return;
+  const original = (__store?.detailAll || []).find(d => d.id === id);
+  const origQty  = parseInt(original?.quantity_boxes || 0);
+  if (qty !== origQty) {
+    __pendingQtyEdits[id] = qty;
+  } else {
+    delete __pendingQtyEdits[id];
+  }
+  // Show/hide the qty save bar
+  const bar = document.getElementById('qtySaveBar');
+  if (bar) bar.style.display = Object.keys(__pendingQtyEdits).length ? 'flex' : 'none';
+  const countEl = document.getElementById('qtySaveCount');
+  if (countEl) countEl.textContent = Object.keys(__pendingQtyEdits).length;
+}
+
+async function saveQtyEdits() {
+  const edits = Object.entries(__pendingQtyEdits);
+  if (!edits.length) return;
+  const btn = document.getElementById('qtySaveBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Saving…'; }
+  try {
+    const rows = edits.map(([id, qty]) => ({ id, quantity_boxes: String(qty) }));
+    const r = await fetch(
+      `https://api.appsheet.com/api/v2/apps/${ORDERS.appId}/tables/order_detail/Action`,
+      { method:'POST', headers:{ 'applicationAccessKey': ORDERS.apiKey, 'Content-Type':'application/json' },
+        body: JSON.stringify({ Action:'Edit', Properties:{}, Rows: rows }) }
+    );
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    // Update in-memory store so UI reflects changes immediately
+    edits.forEach(([id, qty]) => {
+      const rec = (__store?.detailAll || []).find(d => d.id === id);
+      if (rec) rec.quantity_boxes = String(qty);
+      delete __pendingQtyEdits[id];
+    });
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Save Qty Changes'; }
+    const bar = document.getElementById('qtySaveBar');
+    if (bar) bar.style.display = 'none';
+    renderForDate(__viewDate);
+  } catch(e) {
+    alert('Failed to save qty: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Save Qty Changes'; }
+  }
 }
 
 async function savePackOutSelections() {
@@ -1335,7 +1394,10 @@ function renderForDate(viewDate) {
     let rows = '';
     Object.entries(byProd).sort(([a],[b]) => a.localeCompare(b)).forEach(([pname, pitems]) => {
       const gid      = 'pkg_' + pname.replace(/\W+/g,'_');
-      const totalQty = pitems.reduce((s,it) => s + (parseInt(it.quantity_boxes)||0), 0);
+      const totalQty = pitems.reduce((s,it) => {
+        const q = __pendingQtyEdits[it.id] !== undefined ? __pendingQtyEdits[it.id] : (parseInt(it.quantity_boxes)||0);
+        return s + q;
+      }, 0);
       const allIds   = pitems.filter(it => !(it.status||'').toLowerCase().includes('packed'))
                              .map(it => it.id);
       // Group header row — click anywhere to toggle-all
@@ -1357,9 +1419,15 @@ function renderForDate(viewDate) {
         const ord       = orderMap[it.order] || {};
         const customer  = it.client_name || ord.client_name || '—';
         const isPacked  = (it.status||'').toLowerCase().includes('packed');
+        const currentQty = __pendingQtyEdits[it.id] !== undefined ? __pendingQtyEdits[it.id] : (parseInt(it.quantity_boxes)||0);
         rows += `<tr class="pack-item-row" data-gid="${gid}" style="display:none">
           <td style="padding-left:22px;color:#555;font-size:0.82rem">${pname}</td>
-          <td><span class="qty-badge">${it.quantity_boxes||0}</span></td>
+          <td onclick="event.stopPropagation()">
+            <input type="number" min="0" class="qty-edit-input" value="${currentQty}"
+              data-id="${it.id}" data-orig="${parseInt(it.quantity_boxes)||0}"
+              onchange="onQtyChange('${it.id}',this.value)"
+              onclick="event.stopPropagation()">
+          </td>
           <td class="customer-col">${customer}</td>
           <td>${itemStatusText(it.status)}</td>
           <td style="text-align:center;width:36px">
