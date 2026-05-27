@@ -1204,21 +1204,13 @@ function renderForDate(viewDate) {
   const kpiPackTotal = todayDetails.filter(d => !(d.status||'').toLowerCase().includes('cancel')).length;
   const kpiPackDone  = kpiPackTotal - upcomingItems.length;
 
-  // Batches to harvest KPI — driven by growth_journey records scheduled for today.
-  // This keeps the total stable even after batches are marked harvested/harvesting.
-  // growth_task_type label check is case-insensitive; 'harvest' matches 'Harvest'.
-  const harvestJourneysToday = (journeyAll || []).filter(j => {
-    const sched = normDate(j.scheduled_date || '');
-    const isToday_ = sched === todayStr;
-    const taskType = (j.growth_task_type || '').toLowerCase();
-    const isHarvestTask = taskType.includes('harvest');
-    return isToday_ && isHarvestTask;
-  });
-  const kpiHarvestTotal = harvestJourneysToday.length;
-  const kpiHarvestDone  = harvestJourneysToday.filter(j => {
-    const exec = (j.execution || '').toLowerCase();
-    return exec.includes('harvest');  // matches 'harvested', 'harvesting', 'being harvested'
-  }).length;
+  // Batches to harvest KPI — total = all batches scheduled today (pending + done).
+  // optimal_harvest_date does not change when harvested, so total stays stable.
+  // Done = any batch with a "harvested" status, including "being harvested".
+  const kpiHarvestTotal = allHarvestToday.length;
+  const kpiHarvestDone  = allHarvestToday.filter(b =>
+    (b.status_name||'').toLowerCase().includes('harvested')
+  ).length;
 
   const kpiDefs = [
     { val: kpiRoutesTotal,  done: kpiRoutesDone,  label: 'Delivery Routes Today',                           target: 'sec-stops',   cls: 'kpi-green'  },
@@ -1613,20 +1605,41 @@ function renderForDate(viewDate) {
         const _allocBadge = _allAlloc.length
           ? `<span style="font-size:0.68rem;background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:1px 5px;margin-left:5px;font-weight:600">${_allAlloc.length} order${_allAlloc.length>1?'s':''}</span>`
           : '';
+        // Group _allAlloc by product_name A-Z, customers A-Z within each group
+        const _allocByProd = {};
+        _allAlloc.forEach(d => {
+          const pname = d.product_name || '—';
+          if (!_allocByProd[pname]) _allocByProd[pname] = [];
+          _allocByProd[pname].push(d);
+        });
+        const _allocRows = Object.entries(_allocByProd)
+          .sort(([a],[b]) => a.localeCompare(b))
+          .map(([pname, pitems]) => {
+            const totalQty = pitems.reduce((s,d) => s + (parseInt(d.quantity_boxes)||0), 0);
+            const totalOz  = Math.round(pitems.reduce((s,d) => s + (parseFloat(d.total_ounces)||0), 0) * 10) / 10;
+            // Product header row
+            let rows = `<tr>
+              <td style="padding:4px 12px 2px 0;font-weight:700;color:#1e293b" colspan="2">${pname}</td>
+              <td style="padding:4px 12px 2px 0;color:#ea580c;font-weight:700">${totalQty}</td>
+              <td style="padding:4px 0 2px 0;color:#ea580c;font-weight:700">${totalOz.toFixed(1)} oz</td>
+            </tr>`;
+            // One sub-row per customer, sorted A-Z
+            pitems.sort((a,b) => (a.client_name||'').localeCompare(b.client_name||''));
+            rows += pitems.map(d => `<tr>
+              <td style="padding:1px 0 1px 14px;color:#888;font-size:0.74rem" colspan="2">↳ ${d.client_name||'—'}</td>
+              <td style="padding:1px 12px 1px 0;color:#64748b;font-size:0.74rem">${d.quantity_boxes||0}</td>
+              <td style="padding:1px 0;color:#64748b;font-size:0.74rem">${parseFloat(d.total_ounces||0).toFixed(1)} oz</td>
+            </tr>`).join('');
+            return rows;
+          }).join('');
         const _allocTable = _allAlloc.length ? `
           <table style="width:auto;font-size:0.78rem;border-collapse:collapse;margin-top:4px">
             <thead><tr>
-              <th style="color:#9ca3af;font-weight:600;padding:2px 12px 4px 0">Product</th>
-              <th style="color:#9ca3af;font-weight:600;padding:2px 12px 4px 0">Customer</th>
+              <th style="color:#9ca3af;font-weight:600;padding:2px 12px 4px 0" colspan="2">Product / Customer</th>
               <th style="color:#9ca3af;font-weight:600;padding:2px 12px 4px 0">Qty</th>
               <th style="color:#9ca3af;font-weight:600;padding:2px 0 4px 0">Total OZ</th>
             </tr></thead>
-            <tbody>${_allAlloc.map(d => `<tr>
-              <td style="padding:2px 12px 2px 0;font-weight:600;color:#1e293b">${d.product_name||'—'}</td>
-              <td style="padding:2px 12px 2px 0;color:#555">${d.client_name||'—'}</td>
-              <td style="padding:2px 12px 2px 0;color:#ea580c;font-weight:700">${d.quantity_boxes||0}</td>
-              <td style="padding:2px 0;color:#ea580c;font-weight:700">${parseFloat(d.total_ounces||0).toFixed(1)} oz</td>
-            </tr>`).join('')}</tbody>
+            <tbody>${_allocRows}</tbody>
           </table>` : '<span style="color:#aaa;font-size:0.78rem">No orders for this variety tomorrow.</span>';
         html += `<tr style="cursor:pointer" onclick="event.stopPropagation();toggleHarvestAlloc('${_allocId}')">
           <td>${simplifyRack(b._rack_assignment)}</td>
