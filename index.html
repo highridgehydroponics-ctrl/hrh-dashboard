@@ -455,7 +455,7 @@ function selectPackGroup(gid, forceState) {
   const isExpanded = itemRows.length > 0 && itemRows[0].style.display !== 'none';
   if (forceState === undefined) {
     const newVisible = !isExpanded;
-    itemRows.forEach(r => r.style.display = newVisible ? '' : 'none');
+    itemRows.forEach(r => r.style.display = newVisible ? 'table-row' : 'none');
     if (chev) chev.textContent = newVisible ? '▼' : '▶';
     return; // don't change checkboxes on bare expand/collapse
   }
@@ -1400,10 +1400,10 @@ function renderForDate(viewDate) {
       }, 0);
       const allIds   = pitems.filter(it => !(it.status||'').toLowerCase().includes('packed'))
                              .map(it => it.id);
-      // Group header row — click anywhere to toggle-all
+      // Group header row — click to collapse/expand
       rows += `<tr class="pack-group-hdr" onclick="selectPackGroup('${gid}')">
         <td colspan="3">
-          <span id="${gid}_chev" style="font-size:0.72rem;margin-right:6px;color:#1a56cc">▶</span>
+          <span id="${gid}_chev" style="font-size:0.72rem;margin-right:6px;color:#1a56cc">▼</span>
           ${pname}
           <span class="qty-badge" style="margin-left:6px">${totalQty}</span>
         </td>
@@ -1414,15 +1414,15 @@ function renderForDate(viewDate) {
             onchange="selectPackGroup('${gid}',this.checked)">
         </td>
       </tr>`;
-      // Item rows (collapsed by default, shown on group click)
+      // Item rows — expanded by default so qty inputs are immediately visible
       pitems.forEach(it => {
         const ord       = orderMap[it.order] || {};
         const customer  = it.client_name || ord.client_name || '—';
         const isPacked  = (it.status||'').toLowerCase().includes('packed');
         const currentQty = __pendingQtyEdits[it.id] !== undefined ? __pendingQtyEdits[it.id] : (parseInt(it.quantity_boxes)||0);
-        rows += `<tr class="pack-item-row" data-gid="${gid}" style="display:none">
+        rows += `<tr class="pack-item-row" data-gid="${gid}">
           <td style="padding-left:22px;color:#555;font-size:0.82rem">${pname}</td>
-          <td onclick="event.stopPropagation()">
+          <td>
             <input type="number" min="0" class="qty-edit-input" value="${currentQty}"
               data-id="${it.id}" data-orig="${parseInt(it.quantity_boxes)||0}"
               onchange="onQtyChange('${it.id}',this.value)"
