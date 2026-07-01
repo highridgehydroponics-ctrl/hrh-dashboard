@@ -2008,7 +2008,7 @@ function renderForDate(viewDate) {
     document.getElementById('oz-body').innerHTML = '<div class="empty">No allocation data for this date.</div>';
   } else {
     let oz = `<div class="tbl-wrap"><table>
-      <thead><tr><th style="width:30px"></th><th>Variety</th><th style="color:#6b7280;font-size:0.78rem">Batch</th><th style="color:#6b7280;font-size:0.78rem">Rack</th><th>Total Oz</th><th style="color:#92400e;font-size:0.78rem">Bins</th></tr></thead><tbody>`;
+      <thead><tr><th style="width:30px"></th><th>Variety</th><th style="color:#6b7280;font-size:0.78rem">Batch</th><th style="color:#6b7280;font-size:0.78rem">Rack</th><th>Total Oz</th><th style="color:#374151;font-size:0.78rem">Actual Yield</th><th style="color:#92400e;font-size:0.78rem">Bins</th></tr></thead><tbody>`;
     // Compute harvest date = day before ozDate
     const [_ozM,_ozD,_ozY] = ozDate.split('/');
     const harvestDateStr = fmt(addDays(new Date(parseInt(_ozY),parseInt(_ozM)-1,parseInt(_ozD)),-1));
@@ -2027,12 +2027,25 @@ function renderForDate(viewDate) {
       const rackDisplay = matchBatches.length
         ? matchBatches.map(b => simplifyRack(b._rack_assignment||b.rack||'')).filter(Boolean).join(', ')
         : '<span style="color:#bbb">—</span>';
+      // Sum actual yield across all matching batches (respects in-session overrides)
+      const _allocActualYield = Math.round(matchBatches.reduce((s, b) => {
+        const ov = __harvestOverrides[b.id] || {};
+        const yv = ov.yield !== undefined ? parseFloat(ov.yield) : (parseFloat(b.actual_yield||'') || 0);
+        return s + yv;
+      }, 0) * 10) / 10;
+      const _allocYieldColor = _allocActualYield > 0
+        ? (_allocActualYield >= data.total ? '#16a34a' : '#dc2626')
+        : '#9ca3af';
+      const _allocYieldCell = _allocActualYield > 0
+        ? `<span style="color:${_allocYieldColor};font-weight:700;white-space:nowrap">${_allocActualYield.toFixed(1)} oz</span>`
+        : `<span style="color:#d1d5db">—</span>`;
       oz += `<tr style="cursor:pointer" onclick="toggleOzRow('${rowId}')">
         <td><span id="chev_${rowId}" style="color:#1a56cc;font-size:0.8rem">▶</span></td>
         <td style="font-weight:600">${name}${mixBadge}</td>
         <td style="font-size:0.8rem;color:#374151">${batchDisplay}</td>
         <td style="font-size:0.8rem;color:#374151">${rackDisplay}</td>
         <td class="oz-total">${data.total} oz</td>
+        <td style="white-space:nowrap">${_allocYieldCell}</td>
         <td style="white-space:nowrap">${binCell(data.total)}</td>
       </tr>
       <tr id="${rowId}" style="display:none">
