@@ -247,6 +247,36 @@
     .kpi { box-shadow: none; border: 1px solid #ddd; }
     .tbl-wrap { overflow: visible; }
   }
+
+  /* ── Tab bar ── */
+  .dash-tab-bar { display:flex; gap:0; border-bottom: 2px solid #e2e8f0; margin-bottom:20px; }
+  .dash-tab { padding:10px 22px; font-size:0.88rem; font-weight:600; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:#64748b; transition:color .15s,border-color .15s; user-select:none; }
+  .dash-tab:hover { color:#0f766e; }
+  .dash-tab.active { color:#0f766e; border-bottom-color:#0f766e; }
+
+  /* ── Evaporation editor ── */
+  #evap-editor { padding:0; }
+  .evap-farm-bar { display:flex; gap:8px; margin-bottom:16px; }
+  .evap-farm-btn { padding:5px 18px; border-radius:20px; font-size:0.82rem; font-weight:600; border:1.5px solid #cbd5e1; background:#f8fafc; color:#64748b; cursor:pointer; transition:all .15s; }
+  .evap-farm-btn.active { background:#0f766e; color:#fff; border-color:#0f766e; }
+  .evap-rack-hdr { font-size:0.72rem; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.05em; padding:7px 10px 5px; background:#f8fafc; border-bottom:0.5px solid #e2e8f0; border-top:0.5px solid #e2e8f0; }
+  .evap-table { width:auto; border-collapse:collapse; font-size:0.83rem; }
+  .evap-table th { text-align:left; padding:5px 12px; font-size:0.72rem; font-weight:600; color:#94a3b8; text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid #f1f5f9; }
+  .evap-table td { padding:6px 12px; border-bottom:0.5px solid #f1f5f9; vertical-align:middle; }
+  .evap-table tr:last-child td { border-bottom:none; }
+  .evap-rack-badge { display:inline-block; background:#f1f5f9; border:0.5px solid #e2e8f0; border-radius:4px; padding:1px 7px; font-size:0.78rem; font-weight:600; color:#475569; }
+  .evap-input { width:72px; padding:3px 6px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.83rem; text-align:center; background:#fff; color:#1e293b; }
+  .evap-input:focus { outline:none; border-color:#0f766e; background:#f0fdf9; }
+  .evap-input.changed { border-color:#0f766e; background:#f0fdf9; color:#0f766e; font-weight:700; }
+  .evap-delta { font-size:0.72rem; padding:1px 5px; border-radius:4px; font-weight:600; }
+  .evap-delta.up { background:#fef3c7; color:#92400e; }
+  .evap-delta.down { background:#dcfce7; color:#166534; }
+  .evap-save-bar { display:none; position:sticky; bottom:12px; z-index:60; justify-content:center; pointer-events:none; gap:10px; margin-top:14px; }
+  .evap-save-bar.visible { display:flex; }
+  .evap-save-bar button { pointer-events:all; border-radius:10px; padding:9px 22px; font-size:0.9rem; font-weight:700; cursor:pointer; }
+  #evapSaveBtn { background:#0f766e; color:#fff; border:none; box-shadow:0 4px 14px rgba(15,118,110,.35); }
+  #evapDiscardBtn { background:#fff; color:#64748b; border:1.5px solid #cbd5e1; }
+  .evap-error { color:#dc2626; font-size:0.8rem; padding:4px 10px; }
 </style>
 </head>
 <body>
@@ -256,6 +286,14 @@
 <div id="error-msg"></div>
 
 <div id="content">
+  <!-- Tab bar -->
+  <div class="dash-tab-bar">
+    <div class="dash-tab active" id="tab-btn-rundown" onclick="switchTab('rundown')">🌱 Morning Rundown</div>
+    <div class="dash-tab" id="tab-btn-evap" onclick="switchTab('evap')">💧 Evaporation Editor</div>
+  </div>
+
+  <!-- ── Morning Rundown tab ── -->
+  <div id="tab-rundown">
   <!-- Big date banner -->
   <div style="text-align:center;margin-bottom:18px;line-height:1.1">
     <div id="bigDate" style="font-size:3.6rem;font-weight:800;color:#111;letter-spacing:-0.02em"></div>
@@ -393,6 +431,24 @@
     </div>
     <div id="tomorrow-body"></div>
   </div>
+  </div> <!-- end #tab-rundown -->
+
+  <!-- ── Evaporation Editor tab ── -->
+  <div id="tab-evap" style="display:none">
+    <div id="evap-editor">
+      <div class="evap-farm-bar">
+        <button class="evap-farm-btn active" id="evap-btn-m1" onclick="switchEvapFarm('m1')">M1 — Micro 1</button>
+        <button class="evap-farm-btn" id="evap-btn-m2" onclick="switchEvapFarm('m2')">M2 — Micro 2</button>
+      </div>
+      <div id="evap-status" style="font-size:0.82rem;color:#64748b;margin-bottom:10px"></div>
+      <div id="evap-body"><div style="color:#94a3b8;font-size:0.85rem">Loading…</div></div>
+      <div class="evap-save-bar" id="evapSaveBar">
+        <button id="evapDiscardBtn" onclick="discardEvapEdits()">Discard</button>
+        <button id="evapSaveBtn" onclick="saveEvapEdits()">💾 Save to AppSheet (<span id="evapSaveCount">0</span>)</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -1738,15 +1794,33 @@ function renderForDate(viewDate) {
           if (!_allocByProd[pname]) _allocByProd[pname] = [];
           _allocByProd[pname].push(d);
         });
+        // Grand total oz needed from this batch across all products
+        const _grandTotalNeeded = Math.round(_allAlloc.reduce((s,d) => s + (parseFloat(d.total_ounces)||0), 0) * 10) / 10;
+        const _actualYieldNum   = parseFloat(yieldVal) || 0;
+        // Color logic: green if yield covers grand total, red if short, gray if no yield entered
+        const _yieldColor = _actualYieldNum > 0
+          ? (_actualYieldNum >= _grandTotalNeeded ? '#16a34a' : '#dc2626')
+          : '#aaa';
+        const _yieldDisplay = _actualYieldNum > 0
+          ? `<span style="color:${_yieldColor};font-weight:700;white-space:nowrap">${_actualYieldNum.toFixed(1)} oz</span>`
+          : `<span style="color:#aaa">—</span>`;
+
         const _allocRows = Object.entries(_allocByProd)
           .sort(([a],[b]) => a.localeCompare(b))
           .map(([pname, pitems]) => {
             const totalQty = pitems.reduce((s,d) => s + (parseInt(d.quantity_boxes)||0), 0);
             const totalOz  = Math.round(pitems.reduce((s,d) => s + (parseFloat(d.total_ounces)||0), 0) * 10) / 10;
-            // Product header row
+            // Product header row — actual yield column shows batch yield vs this product's needed oz
+            const _prodYieldColor = _actualYieldNum > 0
+              ? (_actualYieldNum >= totalOz ? '#16a34a' : '#dc2626')
+              : '#aaa';
+            const _prodYieldCell = _actualYieldNum > 0
+              ? `<span style="color:${_prodYieldColor};font-weight:700;white-space:nowrap">${_actualYieldNum.toFixed(1)} oz</span>`
+              : `<span style="color:#aaa">—</span>`;
             let rows = `<tr>
               <td style="padding:4px 12px 2px 0;font-weight:700;color:#1e293b" colspan="2">${pname}</td>
               <td style="padding:4px 12px 2px 0;color:#ea580c;font-weight:700">${totalQty}</td>
+              <td style="padding:4px 8px 2px 0;white-space:nowrap">${_prodYieldCell}</td>
               <td style="padding:4px 0 2px 0;color:#ea580c;font-weight:700;white-space:nowrap">${totalOz.toFixed(1)} oz ${binBadge(totalOz)}</td>
             </tr>`;
             // One sub-row per customer, sorted A-Z
@@ -1754,16 +1828,28 @@ function renderForDate(viewDate) {
             rows += pitems.map(d => `<tr>
               <td style="padding:1px 0 1px 14px;color:#888;font-size:0.74rem" colspan="2">↳ ${d.client_name||'—'}</td>
               <td style="padding:1px 12px 1px 0;color:#64748b;font-size:0.74rem">${d.quantity_boxes||0}</td>
+              <td style="padding:1px 8px 1px 0"></td>
               <td style="padding:1px 0;color:#64748b;font-size:0.74rem">${parseFloat(d.total_ounces||0).toFixed(1)} oz</td>
             </tr>`).join('');
             return rows;
           }).join('');
         const _allocTable = _allAlloc.length ? `
+          <div style="margin-bottom:6px;font-size:0.75rem;color:#64748b">
+            Batch yield: ${_yieldDisplay}
+            <span style="color:#cbd5e1;margin:0 4px">vs</span>
+            <span style="color:#64748b">total needed: <strong style="color:#ea580c">${_grandTotalNeeded.toFixed(1)} oz</strong></span>
+            ${_actualYieldNum > 0 && _actualYieldNum < _grandTotalNeeded
+              ? `<span style="color:#dc2626;font-size:0.72rem;margin-left:6px">▼ ${(_grandTotalNeeded - _actualYieldNum).toFixed(1)} oz short</span>`
+              : _actualYieldNum >= _grandTotalNeeded && _actualYieldNum > 0
+                ? `<span style="color:#16a34a;font-size:0.72rem;margin-left:6px">✓ surplus ${(_actualYieldNum - _grandTotalNeeded).toFixed(1)} oz</span>`
+                : ''}
+          </div>
           <table style="width:auto;font-size:0.78rem;border-collapse:collapse;margin-top:4px">
             <thead><tr>
               <th style="color:#9ca3af;font-weight:600;padding:2px 12px 4px 0" colspan="2">Product / Customer</th>
               <th style="color:#9ca3af;font-weight:600;padding:2px 12px 4px 0">Qty</th>
-              <th style="color:#9ca3af;font-weight:600;padding:2px 12px 4px 0">Total OZ</th>
+              <th style="color:#9ca3af;font-weight:600;padding:2px 8px 4px 0">Batch Yield</th>
+              <th style="color:#9ca3af;font-weight:600;padding:2px 12px 4px 0">Needed OZ</th>
             </tr></thead>
             <tbody>${_allocRows}</tbody>
           </table>` : '<span style="color:#aaa;font-size:0.78rem">No orders for this variety tomorrow.</span>';
@@ -2356,6 +2442,289 @@ async function loadData() {
 }
 
 loadData();
+
+// ════════════════════════════════════════════════════════════════
+// TAB SWITCHING
+// ════════════════════════════════════════════════════════════════
+function switchTab(tab) {
+  document.getElementById('tab-rundown').style.display = tab === 'rundown' ? '' : 'none';
+  document.getElementById('tab-evap').style.display    = tab === 'evap'    ? '' : 'none';
+  document.getElementById('tab-btn-rundown').classList.toggle('active', tab === 'rundown');
+  document.getElementById('tab-btn-evap').classList.toggle('active', tab === 'evap');
+  if (tab === 'evap' && !__evapLoaded) loadEvapData();
+}
+
+// ════════════════════════════════════════════════════════════════
+// EVAPORATION EDITOR — data + state
+// ════════════════════════════════════════════════════════════════
+let __evapLoaded   = false;
+let __evapAllRows  = [];          // all VLR rows from AppSheet
+let __evapFarm     = 'm1';        // currently selected farm
+let __evapEdits    = {};          // compound_id → new evaporation_factor (decimal)
+
+const EVAP_FARM_IDS = { m1: '4d817269', m2: '7e441f1a' };
+
+// Variety ID → display name (from skill map)
+const EVAP_VARIETY_NAMES = {
+  '0e5fc90a':'Antonet - Red Leaf','sdfgh':'Arugula','jsgud':'Basil',
+  '6f6bf095':'Basil - Lemon','fdhgs':'Beets','a10bb9df':'Beets, Early Top',
+  '56d3682f':'Beets, Yellow','defdf':'Borage','d0a62a9c':'Brassica Blend',
+  'lofij':'Broccoli','5c3177df':"Bull's Blood Beet",'11367a8d':'Cantaloupe',
+  '051dd4b5':'Cilantro','09811a52':'Collards','b7fc75e1':'Cook - Green Oakleaf',
+  'bgdfg':'Daikon Radish','9331cf4f':'Danstar','4a5725b3':'Edible Flowers',
+  '36be9092':'Gladius','5071510e':'Green Batvia','4f8b35db':'Green Incised - "Vicinity"',
+  'fc995871':'Green Mustard','61d310b6':'Jericho','dscr':'Kale','qwees':'Leeks',
+  '8a6d3e39':'Lettuce Mix','b4838883':'Local Mix','03bf4f00':'Mild Mix',
+  '29f94a80':'Monte Carlo','b57c69bf':'Newham - Little Gem','8c900baf':'Other',
+  'kivfd':'Pea Shoots','sdfhf':'Popcorn Shoots','6cd18bf0':'Radish Mix',
+  'gfxds':'Rainbow Mix','5b87ded3':'Rainbow Mix 2.0','nfhf':'Rambo Radish',
+  '91853233':'Red Butterhead','kjsyh':'Red Cabbage','db6ce1bb':'Red Gem',
+  '630048d6':'Red Mustard','ded572f4':'Red Oak Hydro','04d0d89e':'Red Sweet Crisp Hydro Salanova',
+  '721edccb':'Red Tango','91b827c6':'Red Vein Sorrel','f50e9c21':'Rex - Green Butterhead',
+  '542c3d87':'Salvius - Romaine','6055652b':'Shiso','5ee5edb7':'Sintia - Green Butterhead',
+  'xgfnn':'Super Salad Mix','ojojh':'Tendril Pea','5bff8a5d':'TestingMix',
+  '507a1170':'TestingMix2','bbbf464c':'TestingVariety','0a5e7f72':'TestingVariety2',
+  '9121022d':'TestingVariety3','7d1f729c':'TestingVariety4','80a5f5ba':'Triton Radish',
+  '2df220ed':'Tropicana - Green Leaf','01c5d9d7':'Wasabi','ff257702':'Watercress',
+  'dgfhg':'Wheatgrass','571b0c3e':'Winter Blend'
+};
+
+// M1: rack.id is the valve name (e.g. "1A"). M2: rack.id is a GUID.
+// Build reverse maps so we can display human-readable rack names.
+const EVAP_RACK_NAMES_M2 = {
+  'f389448a':'1A','7E8784C3':'1B','A7820B16':'1C','BE228C16':'1D','719820C6':'1E','6AD23DE1':'1F','8174F9B1':'1G',
+  '23807C10':'2A','CC737E21':'2B','6FE6693D':'2C','A145FBDA':'2D','AA1269BF':'2E','118A3B2E':'2F','B690F284':'2G',
+  '50090B39':'3A','617283ED':'3B','A97C46A3':'3C','752B7676':'3D','11E29307':'3E','E0F07FE6':'3F','43186212':'3G',
+  '40FD10DD':'4A','FEE1F61F':'4B','F25EF0E9':'4C','170A6E2C':'4D','4FB4BE7F':'4E','95F8214F':'4F','6B03317B':'4G',
+  '7156C6A2':'5A','5C9F4CCC':'5B','0B7C32A7':'5C','3E69DAA3':'5D','E734AF3A':'5E','F77ADBE9':'5F','10F02B47':'5G',
+  'CD21CE48':'6A','2019D074':'6B','1D09ECF9':'6C','57F7B604':'6D','EF9FCE58':'6E','6108C3E9':'6F','1BC8048D':'6G',
+  '9EB2FA5C':'7A','43CCA552':'7B','1974B078':'7C','F161DA7E':'7D','E7EF8153':'7E','D1FFDFEA':'7F','894BF6DE':'7G',
+  '7FD318E5':'8A','9DE12B09':'8B','346913D4':'8C','37FBEF25':'8D','334BAF90':'8E','C2553220':'8F','0A29B9BD':'8G',
+  'A7CADE38':'OR 1A','4C731267':'OR 1B','02D36DCE':'OR 1C','44B42D60':'OR 1D','60E2A3A2':'OR 1E','EC9FA0B8':'OR 1F',
+  '0CF0357C':'Cart 1','C02BD9F8':'Cart 2'
+};
+
+function evapRackLabel(rackId, farmKey) {
+  if (farmKey === 'm1') return rackId;   // M1: id IS the label
+  const upper = (rackId||'').toUpperCase();
+  return EVAP_RACK_NAMES_M2[upper] || EVAP_RACK_NAMES_M2[rackId] || rackId;
+}
+
+function evapVarietyName(varietyId) {
+  return EVAP_VARIETY_NAMES[varietyId] || varietyId;
+}
+
+// ── Fetch all VLR rows ──────────────────────────────────────────
+async function loadEvapData() {
+  document.getElementById('evap-status').textContent = 'Loading…';
+  document.getElementById('evap-body').innerHTML = '<div style="color:#94a3b8;padding:12px">Fetching evaporation data from AppSheet…</div>';
+  try {
+    const r = await fetch(
+      `https://api.appsheet.com/api/v2/apps/${GR.appId}/tables/variety_location_rack/Action`,
+      { method:'POST',
+        headers:{ 'applicationAccessKey': GR.apiKey, 'Content-Type':'application/json' },
+        body: JSON.stringify({ Action:'Find', Properties:{}, Rows:[] }) }
+    );
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    __evapAllRows = Array.isArray(data) ? data : [];
+    __evapLoaded  = true;
+    __evapEdits   = {};
+    renderEvapEditor();
+  } catch(e) {
+    document.getElementById('evap-status').textContent = '⚠️ Failed to load: ' + e.message;
+    document.getElementById('evap-body').innerHTML = '';
+  }
+}
+
+// ── Switch farm ─────────────────────────────────────────────────
+function switchEvapFarm(farm) {
+  __evapFarm = farm;
+  document.getElementById('evap-btn-m1').classList.toggle('active', farm === 'm1');
+  document.getElementById('evap-btn-m2').classList.toggle('active', farm === 'm2');
+  renderEvapEditor();
+}
+
+// ── Render table for selected farm ─────────────────────────────
+function renderEvapEditor() {
+  const farmId   = EVAP_FARM_IDS[__evapFarm];
+  const rows     = __evapAllRows.filter(r =>
+    r.location === 'BRIDGEPORT' && r.farm === farmId
+  );
+
+  const statusEl = document.getElementById('evap-status');
+  statusEl.textContent = `${rows.length} rack-variety combinations · ${__evapFarm.toUpperCase()} — Micro ${__evapFarm === 'm1' ? '1' : '2'}`;
+
+  if (!rows.length) {
+    document.getElementById('evap-body').innerHTML = '<div style="color:#94a3b8;padding:12px">No data found for this farm.</div>';
+    return;
+  }
+
+  // Group by rack label, sort rack label A-Z (numeric-aware), then variety A-Z
+  const byRack = {};
+  rows.forEach(r => {
+    const label = evapRackLabel(r.rack, __evapFarm);
+    if (!byRack[label]) byRack[label] = [];
+    byRack[label].push(r);
+  });
+
+  // Sort rack labels naturally: "1A" < "1B" < "2A" … "OR 1A" … "Cart 1"
+  const sortedRacks = Object.keys(byRack).sort((a, b) => {
+    const rackNum = s => {
+      const m = s.match(/^(\d+)([A-Z]*)$/i);
+      if (m) return parseInt(m[1]) * 100 + (m[2].charCodeAt(0)||0);
+      return 9999;
+    };
+    return rackNum(a) - rackNum(b) || a.localeCompare(b);
+  });
+
+  let html = '<div style="border:0.5px solid #e2e8f0;border-radius:8px;overflow:hidden">';
+  html += `<table class="evap-table"><thead><tr>
+    <th style="width:70px">Rack</th>
+    <th>Variety</th>
+    <th style="width:110px">Evaporation %</th>
+    <th style="width:70px">Change</th>
+  </tr></thead>`;
+
+  sortedRacks.forEach(rackLabel => {
+    const rackRows = [...byRack[rackLabel]].sort((a,b) =>
+      evapVarietyName(a.variety).localeCompare(evapVarietyName(b.variety))
+    );
+    html += `<tbody><tr><td colspan="4" class="evap-rack-hdr">Rack ${rackLabel}</td></tr>`;
+    rackRows.forEach(r => {
+      const cid      = r.compound_id;
+      const origDec  = parseFloat(r.evaporation_factor) || 0;
+      const origPct  = Math.round(origDec * 1000) / 10;   // decimal → %
+      const editDec  = __evapEdits[cid];
+      const editPct  = editDec !== undefined ? Math.round(editDec * 1000) / 10 : origPct;
+      const changed  = editDec !== undefined;
+      const delta    = changed ? Math.round((editPct - origPct) * 10) / 10 : 0;
+      const deltaHtml = changed
+        ? `<span class="evap-delta ${delta >= 0 ? 'up' : 'down'}">${delta >= 0 ? '+' : ''}${delta}%</span>`
+        : '<span style="color:#cbd5e1">—</span>';
+      html += `<tr>
+        <td><span class="evap-rack-badge">${rackLabel}</span></td>
+        <td>${evapVarietyName(r.variety)}</td>
+        <td>
+          <input type="number" step="0.1" class="evap-input${changed?' changed':''}"
+            value="${editPct}"
+            data-cid="${cid}"
+            data-orig="${origPct}"
+            onchange="onEvapChange('${cid}',this)"
+            onclick="event.stopPropagation()">
+          <span style="font-size:0.75rem;color:#94a3b8;margin-left:2px">%</span>
+        </td>
+        <td id="evap-delta-${cid}">${deltaHtml}</td>
+      </tr>`;
+    });
+    html += '</tbody>';
+  });
+
+  html += '</table></div>';
+  document.getElementById('evap-body').innerHTML = html;
+  refreshEvapBar();
+}
+
+// ── Track edits ────────────────────────────────────────────────
+function onEvapChange(cid, input) {
+  const pct     = parseFloat(input.value);
+  const origPct = parseFloat(input.dataset.orig);
+  if (isNaN(pct)) return;
+
+  // Range guard
+  if (pct < -30 || pct > 50) {
+    input.style.borderColor = '#dc2626';
+    input.title = `Out of range (allowed: -30% to 50%)`;
+    return;
+  }
+  input.style.borderColor = '';
+  input.title = '';
+
+  const dec = Math.round(pct / 100 * 1000) / 1000;  // % → decimal, 3dp
+  if (Math.abs(pct - origPct) < 0.001) {
+    delete __evapEdits[cid];
+    input.classList.remove('changed');
+  } else {
+    __evapEdits[cid] = dec;
+    input.classList.add('changed');
+  }
+
+  // Update delta badge inline without full re-render
+  const delta    = Math.round((pct - origPct) * 10) / 10;
+  const changed  = __evapEdits[cid] !== undefined;
+  const deltaEl  = document.getElementById('evap-delta-' + cid);
+  if (deltaEl) {
+    deltaEl.innerHTML = changed
+      ? `<span class="evap-delta ${delta >= 0 ? 'up' : 'down'}">${delta >= 0 ? '+' : ''}${delta}%</span>`
+      : '<span style="color:#cbd5e1">—</span>';
+  }
+  refreshEvapBar();
+}
+
+function refreshEvapBar() {
+  const n   = Object.keys(__evapEdits).length;
+  const bar = document.getElementById('evapSaveBar');
+  const cnt = document.getElementById('evapSaveCount');
+  if (bar) { bar.classList.toggle('visible', n > 0); }
+  if (cnt) cnt.textContent = n;
+}
+
+// ── Discard ─────────────────────────────────────────────────────
+function discardEvapEdits() {
+  __evapEdits = {};
+  renderEvapEditor();
+}
+
+// ── Save ────────────────────────────────────────────────────────
+async function saveEvapEdits() {
+  const edits = Object.entries(__evapEdits);
+  if (!edits.length) return;
+
+  const btn = document.getElementById('evapSaveBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Saving…'; }
+
+  // Build rows with all required key fields
+  const rows = edits.map(([cid, newDec]) => {
+    const orig = __evapAllRows.find(r => r.compound_id === cid);
+    if (!orig) return null;
+    return {
+      _RowNumber:          orig._RowNumber,
+      compound_id:         cid,
+      variety:             orig.variety,
+      location:            orig.location,
+      farm:                orig.farm,
+      rack:                orig.rack,
+      evaporation_factor:  String(newDec)
+    };
+  }).filter(Boolean);
+
+  try {
+    const r = await fetch(
+      `https://api.appsheet.com/api/v2/apps/${GR.appId}/tables/variety_location_rack/Action`,
+      { method:'POST',
+        headers:{ 'applicationAccessKey': GR.apiKey, 'Content-Type':'application/json' },
+        body: JSON.stringify({ Action:'Edit', Properties:{}, Rows: rows }) }
+    );
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+
+    // Update in-memory rows so UI reflects changes immediately
+    edits.forEach(([cid, newDec]) => {
+      const rec = __evapAllRows.find(r => r.compound_id === cid);
+      if (rec) rec.evaporation_factor = String(newDec);
+    });
+    __evapEdits = {};
+    renderEvapEditor();
+
+    const statusEl = document.getElementById('evap-status');
+    if (statusEl) {
+      statusEl.innerHTML = `<span style="color:#16a34a;font-weight:600">✓ Saved ${rows.length} change${rows.length>1?'s':''}</span>`;
+      setTimeout(() => renderEvapEditor(), 3000);
+    }
+  } catch(e) {
+    alert('Save failed: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = `💾 Save to AppSheet (${edits.length})`; }
+  }
+}
 </script>
 </body>
 </html>
