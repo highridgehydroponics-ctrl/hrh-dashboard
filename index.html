@@ -458,6 +458,7 @@ const __pendingPackOuts  = {}; // order_detail id → true (queued for Packed Ou
 const __pendingQtyEdits  = {}; // order_detail id → new quantity (unsaved)
 let __allocDate = null;        // MM/DD/YYYY override for Allocation Details, null = use viewDate
 let __packDate  = null;        // MM/DD/YYYY override for Pack Out date, null = use viewDate
+let __evapEdits = {};          // compound_id → new evaporation_factor (decimal) — declared here to avoid TDZ in loadData()
 
 // ── LOCALSTORAGE CACHE ────────────────────────────────────────────────────────
 const _CACHE_KEY    = 'hrh_store_v1';
@@ -2680,7 +2681,6 @@ function switchTab(tab) {
 let __evapLoaded   = false;
 let __evapAllRows  = [];          // all VLR rows from AppSheet
 let __evapFarm     = 'm1';        // currently selected farm
-let __evapEdits    = {};          // compound_id → new evaporation_factor (decimal)
 
 const EVAP_FARM_IDS = { m1: '4d817269', m2: '7e441f1a' };
 
