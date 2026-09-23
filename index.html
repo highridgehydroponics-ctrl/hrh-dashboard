@@ -199,14 +199,10 @@
   .pack-item-row td { padding: 5px 8px; }
   .pack-item-chk { width: 17px; height: 17px; cursor: pointer; accent-color: #1d4ed8; }
   .pack-group-chk { width: 17px; height: 17px; cursor: pointer; accent-color: #1d4ed8; }
-  #packOutSaveBar { display:none; position:sticky; bottom:12px; z-index:50; text-align:center; pointer-events:none; }
-  #packOutSaveBar button { pointer-events:all; background:#1d4ed8; color:#fff; border:none; border-radius:10px; padding:9px 24px; font-size:0.9rem; font-weight:700; cursor:pointer; box-shadow:0 4px 14px rgba(29,78,216,.35); }
-  #packOutSaveBar button:hover { background:#1e40af; }
-  #packOutSaveBar button:disabled { background:#94a3b8; }
-  #qtySaveBar { display:none; position:sticky; bottom:60px; z-index:50; justify-content:center; pointer-events:none; gap:10px; }
-  #qtySaveBar button { pointer-events:all; background:#0f766e; color:#fff; border:none; border-radius:10px; padding:9px 24px; font-size:0.9rem; font-weight:700; cursor:pointer; box-shadow:0 4px 14px rgba(15,118,110,.35); }
-  #qtySaveBar button:hover { background:#0d9488; }
-  #qtySaveBar button:disabled { background:#94a3b8; }
+  #packoutSaveBar { display:none; position:sticky; bottom:12px; z-index:50; text-align:center; pointer-events:none; }
+  #packoutSaveBar button { pointer-events:all; background:#1d4ed8; color:#fff; border:none; border-radius:10px; padding:10px 28px; font-size:0.9rem; font-weight:700; cursor:pointer; box-shadow:0 4px 14px rgba(29,78,216,.35); }
+  #packoutSaveBar button:hover { background:#1e40af; }
+  #packoutSaveBar button:disabled { background:#94a3b8; cursor:default; }
   .qty-edit-input { width:52px; padding:2px 4px; border:1px solid #cbd5e1; border-radius:5px; font-size:0.84rem; font-weight:700; text-align:center; color:#1e293b; background:#f8fafc; }
   .qty-edit-input:focus { outline:none; border-color:#0f766e; background:#f0fdf9; }
 
@@ -338,14 +334,9 @@
       <button onclick="setPackDate('')" style="font-size:0.78rem;padding:4px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#f8fafc;color:#64748b;cursor:pointer">Reset</button>
     </div>
     <div id="packout-body"></div>
-    <div id="packOutSaveBar">
-      <button id="packOutSaveBtn" onclick="savePackOutSelections()">
-        📦 Mark Selected as Packed Out (<span id="packOutCount">0</span>)
-      </button>
-    </div>
-    <div id="qtySaveBar">
-      <button id="qtySaveBtn" onclick="saveQtyEdits()">
-        💾 Save Qty Changes (<span id="qtySaveCount">0</span>)
+    <div id="packoutSaveBar">
+      <button id="packoutSaveBtn" onclick="saveAllPackoutChanges()">
+        💾 Save All Changes (<span id="packoutQtyCount">0</span> qty · <span id="packoutPackCount">0</span> pack-outs)
       </button>
     </div>
   </div>
@@ -548,13 +539,17 @@ function onPackItemChange(detailId, gid, chk) {
   refreshPackOutBar();
 }
 
+// ── Unified pack-out save bar (qty + pack-out status) ─────────────────────
 function refreshPackOutBar() {
-  const n   = Object.keys(__pendingPackOuts).length;
-  const bar = document.getElementById('packOutSaveBar');
-  const cnt = document.getElementById('packOutCount');
-  if (bar) bar.style.display = n > 0 ? 'block' : 'none';
-  if (cnt) cnt.textContent = n;
-  updateSaveBadge(); // keep the global floating save badge in sync too
+  const nPack = Object.keys(__pendingPackOuts).length;
+  const nQty  = Object.keys(__pendingQtyEdits).length;
+  const bar   = document.getElementById('packoutSaveBar');
+  const qCnt  = document.getElementById('packoutQtyCount');
+  const pCnt  = document.getElementById('packoutPackCount');
+  if (bar)  bar.style.display  = (nPack > 0 || nQty > 0) ? 'block' : 'none';
+  if (qCnt) qCnt.textContent   = nQty;
+  if (pCnt) pCnt.textContent   = nPack;
+  updateSaveBadge();
 }
 
 // ── Qty edit tracking ──────────────────────────────────────────────────────
@@ -568,71 +563,124 @@ function onQtyChange(id, newVal) {
   } else {
     delete __pendingQtyEdits[id];
   }
-  // Show/hide the qty save bar
-  const bar = document.getElementById('qtySaveBar');
-  if (bar) bar.style.display = Object.keys(__pendingQtyEdits).length ? 'flex' : 'none';
-  const countEl = document.getElementById('qtySaveCount');
-  if (countEl) countEl.textContent = Object.keys(__pendingQtyEdits).length;
+  refreshPackOutBar();
 }
 
-async function saveQtyEdits() {
+// ── Save qty edits to AppSheet (used internally) ───────────────────────────
+async function _flushQtyEdits() {
   const edits = Object.entries(__pendingQtyEdits);
   if (!edits.length) return;
-  const btn = document.getElementById('qtySaveBtn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Saving…'; }
-  try {
-    const rows = edits.map(([id, qty]) => ({ id, quantity_boxes: String(qty) }));
-    const r = await fetch(
-      `https://api.appsheet.com/api/v2/apps/${ORDERS.appId}/tables/order_detail/Action`,
-      { method:'POST', headers:{ 'applicationAccessKey': ORDERS.apiKey, 'Content-Type':'application/json' },
-        body: JSON.stringify({ Action:'Edit', Properties:{}, Rows: rows }) }
-    );
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    // Update in-memory store so UI reflects changes immediately
-    edits.forEach(([id, qty]) => {
-      const rec = (__store?.detailAll || []).find(d => d.id === id);
-      if (rec) rec.quantity_boxes = String(qty);
-      delete __pendingQtyEdits[id];
-    });
-    if (btn) { btn.disabled = false; btn.textContent = '💾 Save Qty Changes'; }
-    const bar = document.getElementById('qtySaveBar');
-    if (bar) bar.style.display = 'none';
-    renderForDate(__viewDate);
-  } catch(e) {
-    alert('Failed to save qty: ' + e.message);
-    if (btn) { btn.disabled = false; btn.textContent = '💾 Save Qty Changes'; }
-  }
+  const rows = edits.map(([id, qty]) => ({ id, quantity_boxes: String(qty) }));
+  const r = await fetch(
+    `https://api.appsheet.com/api/v2/apps/${ORDERS.appId}/tables/order_detail/Action`,
+    { method:'POST', cache:'no-store',
+      headers:{ 'applicationAccessKey': ORDERS.apiKey, 'Content-Type':'application/json' },
+      body: JSON.stringify({ Action:'Edit', Properties:{}, Rows: rows }) }
+  );
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  edits.forEach(([id, qty]) => {
+    const rec = (__store?.detailAll || []).find(d => d.id === id);
+    if (rec) rec.quantity_boxes = String(qty);
+    delete __pendingQtyEdits[id];
+  });
 }
 
-async function savePackOutSelections() {
+// ── Save pack-out selections to AppSheet (used internally) ─────────────────
+async function _flushPackOuts() {
   const detailIds = Object.keys(__pendingPackOuts);
   if (!detailIds.length) return;
-  const btn = document.getElementById('packOutSaveBtn');
-  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Saving…'; }
-  try {
-    const rows = detailIds.map(id => ({ id, status: 'Packed Out' }));
-    const r = await fetch(
-      `https://api.appsheet.com/api/v2/apps/${ORDERS.appId}/tables/order_detail/Action`,
-      { method:'POST', cache:'no-store',
-        headers:{ 'ApplicationAccessKey': ORDERS.apiKey, 'Content-Type':'application/json' },
-        body: JSON.stringify({ Action:'Edit', Properties:{}, Rows: rows }) }
-    );
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    // Mark rows as packed in UI
-    detailIds.forEach(id => {
-      delete __pendingPackOuts[id];
-      document.querySelectorAll(`.pack-item-chk[data-id="${id}"]`).forEach(chk => {
-        const td = chk.parentElement;
-        if (td) td.innerHTML = '<span style="color:#16a34a;font-size:1rem">✓</span>';
-        const row = chk.closest?.('tr');
-        if (row) row.style.opacity = '0.5';
-      });
+  const rows = detailIds.map(id => ({ id, status: 'Packed Out' }));
+  const r = await fetch(
+    `https://api.appsheet.com/api/v2/apps/${ORDERS.appId}/tables/order_detail/Action`,
+    { method:'POST', cache:'no-store',
+      headers:{ 'ApplicationAccessKey': ORDERS.apiKey, 'Content-Type':'application/json' },
+      body: JSON.stringify({ Action:'Edit', Properties:{}, Rows: rows }) }
+  );
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  detailIds.forEach(id => {
+    delete __pendingPackOuts[id];
+    document.querySelectorAll(`.packout-chk[data-id="${id}"]`).forEach(btn => {
+      btn.classList.remove('queued');
+      btn.classList.add('already-packed');
+      btn.textContent = '✓';
+      btn.title = 'Already Packed Out';
+      btn.onclick = null;
     });
+  });
+}
+
+// ── Flush harvest overrides to AppSheet (used internally) ──────────────────
+async function _flushHarvest() {
+  const harvestIds = [...__dirtyHarvests];
+  if (!harvestIds.length) return;
+  const rows = harvestIds.map(id => {
+    const ov  = __harvestOverrides[id] || {};
+    const row = { id };
+    if (ov.trays !== undefined) row.number_trays_harvested = String(ov.trays);
+    if (ov.yield !== undefined) row.actual_yield           = String(ov.yield);
+    return row;
+  });
+  const r = await fetch(
+    `https://api.appsheet.com/api/v2/apps/${GC.appId}/tables/batch/Action`,
+    { method:'POST', cache:'no-store',
+      headers:{ 'ApplicationAccessKey': GC.apiKey, 'Content-Type':'application/json' },
+      body: JSON.stringify({ Action:'Edit', Properties:{}, Rows: rows }) }
+  );
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  harvestIds.forEach(id => __dirtyHarvests.delete(id));
+  updateSaveBadge();
+}
+
+// ── Flush evaporation edits to AppSheet (used internally) ──────────────────
+async function _flushEvap() {
+  const edits = Object.entries(__evapEdits);
+  if (!edits.length) return;
+  const rows = edits.map(([cid, newDec]) => {
+    const orig = __evapAllRows.find(r => r.compound_id === cid);
+    if (!orig) return null;
+    return {
+      _RowNumber: orig._RowNumber, compound_id: cid,
+      variety: orig.variety, location: orig.location,
+      farm: orig.farm, rack: orig.rack,
+      evaporation_factor: String(newDec)
+    };
+  }).filter(Boolean);
+  const r = await fetch(
+    `https://api.appsheet.com/api/v2/apps/${GR.appId}/tables/variety_location_rack/Action`,
+    { method:'POST',
+      headers:{ 'applicationAccessKey': GR.apiKey, 'Content-Type':'application/json' },
+      body: JSON.stringify({ Action:'Edit', Properties:{}, Rows: rows }) }
+  );
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  edits.forEach(([cid, newDec]) => {
+    const rec = __evapAllRows.find(r => r.compound_id === cid);
+    if (rec) rec.evaporation_factor = String(newDec);
+  });
+  __evapEdits = {};
+  renderEvapEditor();
+}
+
+// ── Combined save: qty first, then pack-out status ─────────────────────────
+async function saveAllPackoutChanges() {
+  const btn = document.getElementById('packoutSaveBtn');
+  const hasQty  = Object.keys(__pendingQtyEdits).length > 0;
+  const hasPack = Object.keys(__pendingPackOuts).length > 0;
+  if (!hasQty && !hasPack) return;
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Saving…'; }
+  const errors = [];
+  if (hasQty)  { try { await _flushQtyEdits();  } catch(e) { errors.push('Qty save failed: ' + e.message); } }
+  if (hasPack) { try { await _flushPackOuts(); } catch(e) { errors.push('Pack-out save failed: ' + e.message); } }
+  if (errors.length) {
+    alert('⚠️ Some saves failed:\n' + errors.join('\n'));
+    if (btn) { btn.disabled = false; }
     refreshPackOutBar();
-    if (btn) { btn.disabled = false; btn.innerHTML = '📦 Mark Selected as Packed Out (<span id="packOutCount">0</span>)'; }
-  } catch(e) {
-    alert('Save failed: ' + e.message);
-    if (btn) { btn.disabled = false; btn.innerHTML = '📦 Mark Selected as Packed Out (<span id="packOutCount">' + detailIds.length + '</span>)'; }
+  } else {
+    if (btn) { btn.innerHTML = '✓ Saved!'; }
+    setTimeout(() => {
+      if (btn) { btn.disabled = false; }
+      refreshPackOutBar();
+      renderForDate(__viewDate);
+    }, 1200);
   }
 }
 
@@ -2385,6 +2433,27 @@ function toggleCancelled() {
 
 // ── LOAD ──────────────────────────────────────────────────────────────────────
 async function loadData() {
+  // Auto-save ALL pending changes before re-fetching data
+  const hasQty      = Object.keys(__pendingQtyEdits).length > 0;
+  const hasPack     = Object.keys(__pendingPackOuts).length > 0;
+  const hasHarvest  = __dirtyHarvests.size > 0;
+  const hasEvap     = Object.keys(__evapEdits || {}).length > 0;
+  if (hasQty || hasPack || hasHarvest || hasEvap) {
+    const btn2 = document.getElementById('refreshBtn');
+    if (btn2) { btn2.disabled = true; btn2.textContent = '💾 Saving…'; }
+    const errors = [];
+    if (hasQty)     { try { await _flushQtyEdits(); } catch(e) { errors.push('Qty: ' + e.message); } }
+    if (hasPack)    { try { await _flushPackOuts(); } catch(e) { errors.push('Pack-out: ' + e.message); } }
+    if (hasHarvest) { try { await _flushHarvest();  } catch(e) { errors.push('Harvest: ' + e.message); } }
+    if (hasEvap)    { try { await _flushEvap();     } catch(e) { errors.push('Evaporation: ' + e.message); } }
+    if (errors.length) {
+      alert('⚠️ Could not auto-save before refresh:\n' + errors.join('\n') + '\n\nYour changes are still pending.');
+      if (btn2) { btn2.disabled = false; btn2.textContent = '⚡ Refresh'; }
+      return; // don't wipe pending changes — let user retry
+    }
+    refreshPackOutBar();
+  }
+
   const btn = document.getElementById('refreshBtn');
   btn.disabled = true;
   btn.textContent = '⏳ Loading…';
@@ -2510,7 +2579,30 @@ async function loadData() {
   }
 }
 
+// Warn before browser tab close/refresh if there are ANY unsaved changes
+window.addEventListener('beforeunload', e => {
+  const hasChanges = Object.keys(__pendingQtyEdits).length > 0 ||
+                     Object.keys(__pendingPackOuts).length > 0 ||
+                     __dirtyHarvests.size > 0 ||
+                     Object.keys(__evapEdits || {}).length > 0;
+  if (hasChanges) {
+    e.preventDefault();
+    e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+    return e.returnValue;
+  }
+});
+
 loadData();
+
+// ── AUTO-REFRESH every 15 minutes ────────────────────────────────
+// loadData() already auto-saves any pending changes before fetching,
+// so the timer is safe to fire unconditionally.
+let __autoRefreshTimer = setInterval(() => {
+  // Skip if user is actively editing a qty input (avoid interrupting mid-type)
+  const activeTag = document.activeElement && document.activeElement.tagName;
+  if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+  loadData();
+}, 15 * 60 * 1000); // 15 minutes
 
 // ════════════════════════════════════════════════════════════════
 // TAB SWITCHING
