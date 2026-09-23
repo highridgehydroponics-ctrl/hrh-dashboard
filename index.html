@@ -2498,10 +2498,9 @@ async function loadData() {
   }
 
   const btn = document.getElementById('refreshBtn');
-  btn.disabled = true;
-  btn.textContent = '⏳ Loading…';
-  document.getElementById('error-msg').style.display = 'none';
-  document.getElementById('warnBadge').style.display = 'none';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Loading…'; }
+  const _errEl  = document.getElementById('error-msg');  if (_errEl)  _errEl.style.display  = 'none';
+  const _warnEl = document.getElementById('warnBadge');  if (_warnEl) _warnEl.style.display = 'none';
 
   // Progress indicator for initial load
   const loadEl = document.getElementById('loading');
@@ -2631,9 +2630,7 @@ async function loadData() {
       document.getElementById('content').style.display  = 'block';
     }
   } finally {
-    btn.disabled = false;
-    btn.textContent = '⚡ Refresh';
-    btn.innerHTML = '⚡ Refresh';
+    if (btn) { btn.disabled = false; btn.innerHTML = '⚡ Refresh'; }
   }
 }
 
