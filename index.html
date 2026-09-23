@@ -459,6 +459,37 @@ const __pendingQtyEdits  = {}; // order_detail id → new quantity (unsaved)
 let __allocDate = null;        // MM/DD/YYYY override for Allocation Details, null = use viewDate
 let __packDate  = null;        // MM/DD/YYYY override for Pack Out date, null = use viewDate
 
+// ── LOCALSTORAGE CACHE ────────────────────────────────────────────────────────
+const _CACHE_KEY    = 'hrh_store_v1';
+const _CACHE_TS_KEY = 'hrh_store_ts_v1';
+
+function saveToCache() {
+  try {
+    localStorage.setItem(_CACHE_KEY, JSON.stringify(__store));
+    localStorage.setItem(_CACHE_TS_KEY, new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}));
+  } catch(e) {
+    console.warn('[HRH] Cache save failed:', e.message); // quota or private mode — non-fatal
+  }
+}
+
+function tryRestoreCache() {
+  try {
+    const raw = localStorage.getItem(_CACHE_KEY);
+    if (!raw) return false;
+    __store = JSON.parse(raw);
+    const ts = localStorage.getItem(_CACHE_TS_KEY) || '?';
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display  = 'block';
+    const lr = document.getElementById('lastRefresh');
+    if (lr) { lr.textContent = `Cached ${ts} · refreshing…`; lr.style.display = 'inline'; }
+    renderForDate(__viewDate);
+    return true;
+  } catch(e) {
+    console.warn('[HRH] Cache restore failed:', e.message);
+    return false;
+  }
+}
+
 function getContainer(rackStr) {
   if (!rackStr) return 'Other';
   const m = (rackStr||'').match(/^(M\d)/i);
@@ -1163,14 +1194,25 @@ function showAll() {
 }
 
 // ── APPSHEET ──────────────────────────────────────────────────────────────────
-async function appFetch(creds, table) {
+async function appFetch(creds, table, timeoutMs = 30000) {
   const url = `https://api.appsheet.com/api/v2/apps/${creds.appId}/tables/${encodeURIComponent(table)}/Action`;
-  const r = await fetch(url, {
-    method: 'POST',
-    cache: 'no-store',
-    headers: { 'ApplicationAccessKey': creds.apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ Action: 'Find', Properties: {}, Rows: [] })
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  let r;
+  try {
+    r = await fetch(url, {
+      method: 'POST',
+      cache: 'no-store',
+      signal: ctrl.signal,
+      headers: { 'ApplicationAccessKey': creds.apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Action: 'Find', Properties: {}, Rows: [] })
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    if (err.name === 'AbortError') throw new Error(`Timeout fetching "${table}" (>${timeoutMs/1000}s)`);
+    throw err;
+  }
+  clearTimeout(timer);
   if (!r.ok) throw new Error(`AppSheet error on "${table}": ${r.status}`);
   const t = await r.text();
   return t.trim() ? JSON.parse(t) : [];
@@ -2460,19 +2502,33 @@ async function loadData() {
   document.getElementById('error-msg').style.display = 'none';
   document.getElementById('warnBadge').style.display = 'none';
 
+  // Progress indicator for initial load
+  const loadEl = document.getElementById('loading');
+  const TOTAL_TABLES = 11;
+  let __loadedCount = 0;
+  function trackFetch(creds, table) {
+    return appFetch(creds, table).then(result => {
+      __loadedCount++;
+      if (loadEl && loadEl.style.display !== 'none') {
+        loadEl.textContent = `⏳ Loading data from AppSheet… (${__loadedCount}/${TOTAL_TABLES})`;
+      }
+      return result;
+    });
+  }
+
   try {
     const [sliceAll, ordersAll, detailAll, batchAll, varietyAll, clientAll, varietyMixAll, deliveryAll, vehicleAll, delivItemAll, journeyAll] = await Promise.all([
-      appFetch(ORDERS, 'labels to print upcoming week only'),
-      appFetch(ORDERS, 'order'),
-      appFetch(ORDERS, 'order_detail'),
-      appFetch(GC,     'batch'),
-      appFetch(GR,     'variety'),
-      appFetch(ORDERS, 'client'),
-      appFetch(GR,     'variety_mix'),
-      appFetch(DELIV,  'delivery'),
-      appFetch(DELIV,  'vehicle'),
-      appFetch(DELIV,  'delivery_item'),
-      appFetch(GC,     'growth_journey')
+      trackFetch(ORDERS, 'labels to print upcoming week only'),
+      trackFetch(ORDERS, 'order'),
+      trackFetch(ORDERS, 'order_detail'),
+      trackFetch(GC,     'batch'),
+      trackFetch(GR,     'variety'),
+      trackFetch(ORDERS, 'client'),
+      trackFetch(GR,     'variety_mix'),
+      trackFetch(DELIV,  'delivery'),
+      trackFetch(DELIV,  'vehicle'),
+      trackFetch(DELIV,  'delivery_item'),
+      trackFetch(GC,     'growth_journey')
     ]);
 
     const varMap = {};
@@ -2534,6 +2590,7 @@ async function loadData() {
     }
 
     __store = { sliceAll, ordersAll, detailAll, batchAll, varMap, clientPrefs, orderMap, mixMap, deliveryByOrder, delivItemAll, deliveryAll, vehicleMap, journeyAll };
+    saveToCache();
     // Debug: log growth_journey structure so we can see field values
     if (journeyAll && journeyAll.length) {
       console.log('[HRH] growth_journey sample record:', JSON.stringify(journeyAll[0]));
@@ -2592,6 +2649,8 @@ window.addEventListener('beforeunload', e => {
   }
 });
 
+// Show cached data instantly (if available), then always fetch fresh in background
+tryRestoreCache();
 loadData();
 
 // ── AUTO-REFRESH every 15 minutes ────────────────────────────────
